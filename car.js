@@ -1,9 +1,9 @@
 // car.js — Player car physics, input handling, and drawing
 
 // --- Tuning constants (fun to experiment with!) ---
-var MAX_SPEED      = 250;  // px/s — top speed on track
-var ACCELERATION   = 180;  // px/s² — how fast the car speeds up
-var BRAKING        = 220;  // px/s² — how fast the car slows down
+var MAX_SPEED      = 320;  // px/s — top speed on track
+var ACCELERATION   = 85;   // px/s² — how fast the car speeds up
+var BRAKING        = 160;  // px/s² — how fast the car slows down
 var FRICTION       = 1.5;  // /s — natural speed decay when no key held
 var TURN_SPEED     = 2.2;  // rad/s — steering sensitivity
 var OFFTRACK_MULT  = 0.4;  // speed multiplier when off the track (grass)
@@ -20,8 +20,8 @@ function Car(x, y, angle, color) {
 }
 
 Car.prototype.update = function(dt, input, track) {
-  // Turning — scale by speed fraction so the car can't spin in place
-  var speedFraction = Math.abs(this.speed) / MAX_SPEED;
+  // Turning — scale by speed fraction (min 0.3 so arrow keys always respond)
+  var speedFraction = Math.max(0.3, Math.abs(this.speed) / MAX_SPEED);
   if (input.left)  this.angle -= TURN_SPEED * speedFraction * dt;
   if (input.right) this.angle += TURN_SPEED * speedFraction * dt;
 
@@ -49,11 +49,7 @@ Car.prototype.update = function(dt, input, track) {
   this.x += Math.cos(this.angle) * effectiveSpeed * dt;
   this.y += Math.sin(this.angle) * effectiveSpeed * dt;
 
-  // Keep within canvas bounds
-  if (this.x < 0)   this.x = 0;
-  if (this.x > 800) this.x = 800;
-  if (this.y < 0)   this.y = 0;
-  if (this.y > 600) this.y = 600;
+  // (no canvas-bounds clamp — world is larger than 800×600)
 };
 
 Car.prototype.draw = function(ctx, alpha) {

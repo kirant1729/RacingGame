@@ -1,11 +1,12 @@
 // lap.js — Lap timing, finish-line detection, and HUD overlay
 
-// Finish line: a horizontal stripe across the track at the bottom of the oval
-// The oval center is at (400, 300), bottom is around y=520, spanning track width
-var FINISH_X = 400;          // x position of finish line (center of track bottom)
-var FINISH_Y = 516;          // y position of finish line
-var FINISH_HALF_W = 62;      // half-width of the finish stripe (track width at bottom ~130px)
-var MIN_LAP_TIME = 3000;     // ms — minimum time between crossings (prevents double-count)
+// Finish line: a vertical stripe across the track at the bottom of the oval (x=400)
+// Oval: cx=400, cy=300, outerRy=220, innerRy=130
+// At x=400: outer edge y=520, inner edge y=430, center y=475
+var FINISH_X      = 500;   // x position of the vertical finish line (Monza main straight)
+var FINISH_Y      = 1200;  // center y of the track at the finish line
+var FINISH_HALF_H = 80;    // half-height of the detection zone
+var MIN_LAP_TIME  = 3000; // ms — minimum time between crossings (prevents double-count)
 
 function Lap() {
   this.lapCount = 0;
@@ -13,11 +14,13 @@ function Lap() {
   this.currentLapMs = 0;
   this.bestLapMs = Infinity;
   this.bestLapFlashTimer = 0;  // ms remaining for "NEW BEST!" display
-  this.lastY = null;           // car's previous y (for crossing detection)
-  this.lastCrossTime = 0;      // performance.now() of last crossing
+  this.lastX = null;           // car's previous x (for crossing detection)
+  this.lastCrossTime = 0;      // timestamp of last valid crossing
+  this.wrongWayTimer = 0;      // ms remaining for "WRONG WAY!" display
+  this.lastWrongWayTime = 0;   // timestamp of last wrong-way crossing
 }
 
-// Call every frame before the car moves (pass car object and current timestamp)
+// Call every frame (pass car object and current timestamp)
 Lap.prototype.update = function(car, now) {
   if (this.lapStartTime === null) {
     this.lapStartTime = now;
@@ -26,58 +29,81 @@ Lap.prototype.update = function(car, now) {
 
   // Tick best-lap flash down
   if (this.bestLapFlashTimer > 0) {
-    this.bestLapFlashTimer -= 16; // approximate frame time
+    this.bestLapFlashTimer -= 16;
   }
 
   // --- Finish line crossing detection ---
-  // Car must be horizontally within the finish stripe
-  var nearLine = Math.abs(car.x - FINISH_X) < FINISH_HALF_W;
-  // Detect the car crossing the finish line y from above (prevY < finishY) to below (curY >= finishY)
-  if (nearLine && this.lastY !== null) {
-    var crossed = this.lastY < FINISH_Y && car.y >= FINISH_Y;
-    var cooldownOk = (now - this.lastCrossTime) > MIN_LAP_TIME;
+  // Car must be vertically within the finish stripe (on the track at the bottom)
+  var onTrack = car.y > (FINISH_Y - FINISH_HALF_H) && car.y < (FINISH_Y + FINISH_HALF_H);
+  // Detect car crossing x=400 from left to right (clockwise direction)
+  var crossed = onTrack && this.lastX !== null && this.lastX < FINISH_X && car.x >= FINISH_X;
+  var cooldownOk = (now - this.lastCrossTime) > MIN_LAP_TIME;
 
-    if (crossed && cooldownOk) {
-      if (this.lapCount > 0) {
-        // Record best lap
-        if (this.currentLapMs < this.bestLapMs) {
-          this.bestLapMs = this.currentLapMs;
-          this.bestLapFlashTimer = 2500;
-        }
+  if (crossed && cooldownOk) {
+    if (this.lapCount > 0) {
+      // Record best lap
+      if (this.currentLapMs < this.bestLapMs) {
+        this.bestLapMs = this.currentLapMs;
+        this.bestLapFlashTimer = 2500;
       }
-      this.lapCount++;
-      this.lapStartTime = now;
-      this.currentLapMs = 0;
-      this.lastCrossTime = now;
     }
+    this.lapCount++;
+    this.lapStartTime = now;
+    this.currentLapMs = 0;
+    this.lastCrossTime = now;
   }
 
-  this.lastY = car.y;
+  // Wrong-way detection — car crossed finish line right-to-left
+  var wrongWay = onTrack && this.lastX !== null &&
+                 this.lastX >= FINISH_X && car.x < FINISH_X &&
+                 (now - this.lastWrongWayTime) > MIN_LAP_TIME;
+  if (wrongWay) {
+    this.wrongWayTimer    = 2500;
+    this.lastWrongWayTime = now;
+  }
+  if (this.wrongWayTimer > 0) this.wrongWayTimer -= 16;
+
+  this.lastX = car.x;
 };
 
-// Draw the checkered finish line stripe
+// Draw "WRONG WAY!" overlay when the car crosses the finish line backwards
+Lap.prototype.drawWrongWay = function(ctx) {
+  if (this.wrongWayTimer <= 0) return;
+  var alpha = Math.min(1, this.wrongWayTimer / 500);
+  ctx.save();
+  ctx.globalAlpha   = alpha;
+  ctx.fillStyle     = '#ff2020';
+  ctx.font          = 'bold 62px Courier New';
+  ctx.textAlign     = 'center';
+  ctx.textBaseline  = 'middle';
+  ctx.fillText('WRONG WAY!', 400, 200);
+  ctx.globalAlpha   = 1;
+  ctx.restore();
+};
+
+// Draw the checkered finish line as a vertical stripe on the track
+// (kept for reference; not called in 3D mode — finish line rendered by Mode 7)
 Lap.prototype.drawFinishLine = function(ctx) {
   var squareSize = 10;
-  var stripeHeight = 8;
-  var cols = Math.floor((FINISH_HALF_W * 2) / squareSize);
-  var startX = FINISH_X - FINISH_HALF_W;
-  var startY = FINISH_Y - stripeHeight / 2;
+  var stripeWidth = 8;
+  var rows = Math.floor((FINISH_HALF_H * 2) / squareSize);  // 9 squares tall
+  var startX = FINISH_X - stripeWidth / 2;
+  var startY = FINISH_Y - FINISH_HALF_H;
 
-  for (var col = 0; col < cols; col++) {
-    for (var row = 0; row < 2; row++) {
-      var isBlack = (col + row) % 2 === 0;
-      ctx.fillStyle = isBlack ? '#000' : '#fff';
+  for (var row = 0; row < rows; row++) {
+    for (var col = 0; col < 2; col++) {
+      ctx.fillStyle = (row + col) % 2 === 0 ? '#000' : '#fff';
       ctx.fillRect(
-        startX + col * squareSize,
-        startY + row * (stripeHeight / 2),
-        squareSize,
-        stripeHeight / 2
+        startX + col * (stripeWidth / 2),
+        startY + row * squareSize,
+        stripeWidth / 2,
+        squareSize
       );
     }
   }
 };
 
-// Format milliseconds as M:SS.mm
+// Format milliseconds as M:SS.cc
 function formatTime(ms) {
   if (ms === Infinity) return '--:--.--';
   var minutes = Math.floor(ms / 60000);
