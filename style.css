@@ -1,0 +1,41 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: #1a1a2e;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  font-family: 'Courier New', monospace;
+}
+
+#container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+h1 {
+  color: #e94560;
+  font-size: 2rem;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+}
+
+#gameCanvas {
+  border: 3px solid #e94560;
+  border-radius: 4px;
+  display: block;
+  background: #2a4a2a;
+}
+
+#controls {
+  color: #888;
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+}
