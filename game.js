@@ -194,19 +194,17 @@ function drawBackground() {
 }
 
 // ─────────────────────────────────────────────
-// Tire-barrier obstacles
+// Speed-boost ramps (small yellow wedges)
 // ─────────────────────────────────────────────
 var OBSTACLES = [
-  // Roggia chicane
-  {x: 1750, y: 1940, r: 28}, {x: 1480, y: 1975, r: 28}, {x: 1400, y: 1960, r: 28},
-  // Lesmo 1 apex, between Lesmos, Lesmo 2
-  {x: 1130, y: 1690, r: 28}, {x: 1330, y: 1465, r: 28}, {x: 1450, y: 1255, r: 28},
-  // Ascari chicane
-  {x: 1040, y: 1025, r: 28}, {x: 930,  y: 1080, r: 28}, {x: 870,  y: 1195, r: 28},
-  // Parabolica apex
-  {x: 490,  y: 1700, r: 28}, {x: 360,  y: 1700, r: 28},
-  // Curva Grande
-  {x: 2015, y: 1570, r: 28}
+  {x: 1870, y: 1360, r: 12},  // Turn 1 entry
+  {x: 2040, y: 1450, r: 12},  // Right apex
+  {x: 1870, y: 1640, r: 12},  // Turn 2 exit
+  {x: 1250, y: 1700, r: 12},  // Back straight mid
+  {x:  750, y: 1700, r: 12},  // Back straight mid
+  {x:  230, y: 1640, r: 12},  // Turn 3 entry
+  {x:  160, y: 1450, r: 12},  // Left apex
+  {x:  230, y: 1260, r: 12}   // Turn 4 exit
 ];
 
 // ─────────────────────────────────────────────
@@ -284,7 +282,7 @@ function drawRoad() {
 }
 
 // ─────────────────────────────────────────────
-// Draw tire barriers projected into 3D view
+// Draw speed-boost ramps as 3D yellow wedges
 // ─────────────────────────────────────────────
 function drawObstacles() {
   var cosA = Math.cos(cam.angle);
@@ -300,114 +298,228 @@ function drawObstacles() {
     var sx  = W / 2 + lat * FOCAL_LEN / fwd;
     var sy  = HORIZON + CAM_HEIGHT * FOCAL_LEN / fwd;
     var sc  = FOCAL_LEN / fwd;
-    var sw  = Math.max(4, obs.r * 2 * sc);
-    var sh  = Math.max(4, obs.r * 1.4 * sc);
+    var sw  = Math.max(6, obs.r * 2.5 * sc);
+    var sh  = Math.max(4, obs.r * 2.0 * sc);
     if (sx < -sw || sx > W + sw || sy > H) continue;
 
-    // Draw as a stacked red/white tire barrier
-    ctx.fillStyle = '#cc2200';
-    ctx.fillRect(sx - sw / 2, sy - sh, sw, sh * 0.6);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(sx - sw / 2, sy - sh * 0.4, sw, sh * 0.4);
-    // Black outline
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth   = Math.max(1, sc * 1.5);
-    ctx.strokeRect(sx - sw / 2, sy - sh, sw, sh);
+    // Ramp wedge — orange base, yellow top, white stripe
+    ctx.fillStyle = '#ff6600';
+    ctx.beginPath();
+    ctx.moveTo(sx - sw / 2, sy);           // bottom-left
+    ctx.lineTo(sx + sw / 2, sy);           // bottom-right
+    ctx.lineTo(sx + sw / 2, sy - sh * 0.5); // right mid
+    ctx.lineTo(sx,          sy - sh);      // top-center apex
+    ctx.lineTo(sx - sw / 2, sy - sh * 0.5); // left mid
+    ctx.closePath();
+    ctx.fill();
+
+    // Yellow highlight stripe
+    ctx.fillStyle = '#ffee00';
+    ctx.beginPath();
+    ctx.moveTo(sx - sw * 0.25, sy - sh * 0.4);
+    ctx.lineTo(sx + sw * 0.25, sy - sh * 0.4);
+    ctx.lineTo(sx,             sy - sh * 0.9);
+    ctx.closePath();
+    ctx.fill();
+
+    // Thin outline
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth   = Math.max(1, sc);
+    ctx.beginPath();
+    ctx.moveTo(sx - sw / 2, sy);
+    ctx.lineTo(sx + sw / 2, sy);
+    ctx.lineTo(sx + sw / 2, sy - sh * 0.5);
+    ctx.lineTo(sx,          sy - sh);
+    ctx.lineTo(sx - sw / 2, sy - sh * 0.5);
+    ctx.closePath();
+    ctx.stroke();
   }
 }
 
 // ─────────────────────────────────────────────
-// Draw opponent cars as 3D-projected sprites
+// Draw opponent cars as realistic 3D sprites
 // ─────────────────────────────────────────────
 function drawOpponents() {
   var cosA = Math.cos(cam.angle);
   var sinA = Math.sin(cam.angle);
 
-  // Collect visible opponents
   var visible = [];
   for (var i = 0; i < ghosts.length; i++) {
-    var gh   = ghosts[i];
-    var dx   = gh.x - cam.x, dy = gh.y - cam.y;
-    var fwd  = dx * cosA + dy * sinA;
-    var lat  = -dx * sinA + dy * cosA;
+    var gh  = ghosts[i];
+    var dx  = gh.x - cam.x, dy = gh.y - cam.y;
+    var fwd = dx * cosA + dy * sinA;
+    var lat = -dx * sinA + dy * cosA;
     if (fwd < 15) continue;
     var sx = W / 2 + lat * FOCAL_LEN / fwd;
     var sy = HORIZON + CAM_HEIGHT * FOCAL_LEN / fwd;
     var sc = FOCAL_LEN / fwd;
-    if (sx < -80 || sx > W + 80 || sy > H - 100) continue;
+    if (sx < -100 || sx > W + 100 || sy > H - 80) continue;
     visible.push({ ghost: gh, sx: sx, sy: sy, sc: sc, depth: fwd });
   }
-
-  // Far to near (painter's algorithm)
   visible.sort(function(a, b) { return b.depth - a.depth; });
 
   for (var j = 0; j < visible.length; j++) {
     var v  = visible[j];
-    var cw = Math.max(8,  44 * v.sc);
-    var ch = Math.max(4,  24 * v.sc);
+    var cw = Math.max(10, 52 * v.sc);   // car width
+    var ch = Math.max(5,  28 * v.sc);   // car height
     var bx = v.sx, by = v.sy;
+    var col = v.ghost.color;
 
-    // Car body
-    ctx.fillStyle = v.ghost.color;
-    ctx.fillRect(bx - cw / 2, by - ch, cw, ch);
-
-    // Windshield
-    ctx.fillStyle = 'rgba(150,220,255,0.55)';
-    ctx.fillRect(bx - cw / 2 + cw * 0.08, by - ch + ch * 0.12, cw * 0.38, ch * 0.65);
-
-    // Wheels
+    // ── Rear diffuser (wide dark base) ──────────
     ctx.fillStyle = '#111';
-    ctx.fillRect(bx - cw / 2 - 1,              by - ch * 0.30, cw * 0.18, ch * 0.32);
-    ctx.fillRect(bx + cw / 2 - cw * 0.18 + 1, by - ch * 0.30, cw * 0.18, ch * 0.32);
+    ctx.fillRect(bx - cw * 0.62, by - ch * 0.22, cw * 1.24, ch * 0.22);
+
+    // ── Side pods (flanking lower body) ─────────
+    ctx.fillStyle = col;
+    ctx.fillRect(bx - cw * 0.60, by - ch * 0.75, cw * 0.17, ch * 0.55);
+    ctx.fillRect(bx + cw * 0.43, by - ch * 0.75, cw * 0.17, ch * 0.55);
+
+    // ── Main body ───────────────────────────────
+    ctx.fillStyle = col;
+    ctx.fillRect(bx - cw * 0.42, by - ch, cw * 0.84, ch);
+
+    // ── Livery accent stripe ─────────────────────
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    ctx.fillRect(bx - cw * 0.40, by - ch, cw * 0.08, ch * 0.85);
+
+    // ── Rear wing (wide, thin, above body) ──────
+    ctx.fillStyle = '#222';
+    ctx.fillRect(bx - cw * 0.56, by - ch - ch * 0.18, cw * 1.12, ch * 0.12);
+    // Wing endplates
+    ctx.fillStyle = col;
+    ctx.fillRect(bx - cw * 0.60, by - ch - ch * 0.22, cw * 0.08, ch * 0.22);
+    ctx.fillRect(bx + cw * 0.52, by - ch - ch * 0.22, cw * 0.08, ch * 0.22);
+
+    // ── Cockpit / roll hoop ──────────────────────
+    ctx.fillStyle = '#0a0a1a';
+    ctx.beginPath();
+    ctx.ellipse(bx - cw * 0.06, by - ch * 0.72,
+                cw * 0.20, ch * 0.32, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Roll hoop bar
+    ctx.fillStyle = '#333';
+    ctx.fillRect(bx - cw * 0.04, by - ch - ch * 0.05, cw * 0.08, ch * 0.40);
+
+    // ── Nose cone (pointed front) ────────────────
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(bx + cw * 0.42, by - ch * 0.75);
+    ctx.lineTo(bx + cw * 0.65, by - ch * 0.35);
+    ctx.lineTo(bx + cw * 0.42, by - ch * 0.10);
+    ctx.closePath();
+    ctx.fill();
+
+    // ── Front wing ───────────────────────────────
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(bx + cw * 0.38, by - ch * 0.14, cw * 0.28, ch * 0.08);
+
+    // ── Wheels (dark, wide) ──────────────────────
+    ctx.fillStyle = '#111';
+    // Rear (left on screen = car's left)
+    ctx.fillRect(bx - cw * 0.62, by - ch * 0.36, cw * 0.20, ch * 0.36);
+    // Rear right
+    ctx.fillRect(bx + cw * 0.42, by - ch * 0.36, cw * 0.20, ch * 0.36);
+
+    // Tyre highlight
+    ctx.fillStyle = 'rgba(80,80,80,0.7)';
+    ctx.fillRect(bx - cw * 0.60, by - ch * 0.34, cw * 0.05, ch * 0.30);
+    ctx.fillRect(bx + cw * 0.55, by - ch * 0.34, cw * 0.05, ch * 0.30);
   }
 }
 
 // ─────────────────────────────────────────────
-// Draw player car hood / dashboard
+// Draw player car hood / cockpit view
 // ─────────────────────────────────────────────
 function drawCarHood() {
   var hw = W / 2;
 
-  // Hood trapezoid
+  // ── Side pods (visible on each side) ─────────
   ctx.fillStyle = player.color;
   ctx.beginPath();
-  ctx.moveTo(hw - 138, H);
-  ctx.lineTo(hw + 138, H);
-  ctx.lineTo(hw + 58,  H - 120);
-  ctx.lineTo(hw - 58,  H - 120);
+  ctx.moveTo(0,         H);
+  ctx.lineTo(hw - 90,   H);
+  ctx.lineTo(hw - 70,   H - 115);
+  ctx.lineTo(0,         H - 80);
   ctx.closePath();
   ctx.fill();
 
-  // Sheen highlight
-  ctx.fillStyle = 'rgba(255,255,255,0.10)';
   ctx.beginPath();
-  ctx.moveTo(hw - 110, H);
-  ctx.lineTo(hw - 12,  H);
-  ctx.lineTo(hw - 30,  H - 120);
-  ctx.lineTo(hw - 58,  H - 120);
+  ctx.moveTo(W,         H);
+  ctx.lineTo(hw + 90,   H);
+  ctx.lineTo(hw + 70,   H - 115);
+  ctx.lineTo(W,         H - 80);
   ctx.closePath();
   ctx.fill();
 
-  // Dashboard strip
-  ctx.fillStyle = '#0a0a0a';
-  ctx.fillRect(0, H - 120, W, 20);
+  // ── Main hood (narrow nose cone perspective) ──
+  ctx.fillStyle = player.color;
+  ctx.beginPath();
+  ctx.moveTo(hw - 90,  H);
+  ctx.lineTo(hw + 90,  H);
+  ctx.lineTo(hw + 38,  H - 115);
+  ctx.lineTo(hw - 38,  H - 115);
+  ctx.closePath();
+  ctx.fill();
 
-  // Headlights
+  // Hood sheen
+  ctx.fillStyle = 'rgba(255,255,255,0.13)';
+  ctx.beginPath();
+  ctx.moveTo(hw - 80,  H);
+  ctx.lineTo(hw - 10,  H);
+  ctx.lineTo(hw - 18,  H - 115);
+  ctx.lineTo(hw - 38,  H - 115);
+  ctx.closePath();
+  ctx.fill();
+
+  // ── Dashboard bar ─────────────────────────────
+  ctx.fillStyle = '#0d0d0d';
+  ctx.fillRect(0, H - 118, W, 18);
+
+  // ── Cockpit opening (dark visor area) ─────────
+  ctx.fillStyle = '#060612';
+  ctx.beginPath();
+  ctx.ellipse(hw, H - 118, 48, 20, 0, Math.PI, Math.PI * 2);
+  ctx.fill();
+
+  // ── Helmet inside cockpit ─────────────────────
+  // Helmet body
+  ctx.fillStyle = player.color;
+  ctx.beginPath();
+  ctx.ellipse(hw, H - 132, 22, 18, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Visor
+  ctx.fillStyle = 'rgba(80,200,255,0.75)';
+  ctx.beginPath();
+  ctx.ellipse(hw + 6, H - 132, 14, 10, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+  // Visor glint
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.beginPath();
+  ctx.ellipse(hw + 2, H - 137, 5, 3, -0.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ── Roll hoop ────────────────────────────────
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(hw - 6, H - 160, 12, 42);
+  ctx.fillStyle = '#333';
+  ctx.fillRect(hw - 22, H - 162, 44, 6);
+
+  // ── Headlights ────────────────────────────────
   ctx.fillStyle = 'rgba(255,252,190,0.95)';
   ctx.beginPath();
-  ctx.ellipse(hw - 54, H - 122, 9, 5, 0, 0, Math.PI * 2);
+  ctx.ellipse(hw - 32, H - 120, 8, 4, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(hw + 54, H - 122, 9, 5, 0, 0, Math.PI * 2);
+  ctx.ellipse(hw + 32, H - 120, 8, 4, 0, 0, Math.PI * 2);
   ctx.fill();
-
-  // Headlight inner glow
-  ctx.fillStyle = 'rgba(200,230,255,0.5)';
+  // Glow
+  ctx.fillStyle = 'rgba(200,230,255,0.45)';
   ctx.beginPath();
-  ctx.ellipse(hw - 54, H - 122, 5, 3, 0, 0, Math.PI * 2);
+  ctx.ellipse(hw - 32, H - 120, 4, 2, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(hw + 54, H - 122, 5, 3, 0, 0, Math.PI * 2);
+  ctx.ellipse(hw + 32, H - 120, 4, 2, 0, 0, Math.PI * 2);
   ctx.fill();
 }
 
@@ -463,7 +575,7 @@ function drawStartScreen() {
 
   ctx.fillStyle = '#00ffff';
   ctx.font      = 'bold 15px Courier New';
-  ctx.fillText('MONZA-INSPIRED CIRCUIT', W / 2, 248);
+  ctx.fillText('NASCAR-STYLE OVAL', W / 2, 248);
 
   ctx.fillStyle = '#fff';
   ctx.font      = '20px Courier New';
@@ -518,12 +630,13 @@ function loop(timestamp) {
     lap.update(player, timestamp);
     updateCamera();
 
-    // Obstacle collision — stop the car dead
+    // Ramp collision — speed boost with cooldown
     for (var oi = 0; oi < OBSTACLES.length; oi++) {
       var obs = OBSTACLES[oi];
       var odx = player.x - obs.x, ody = player.y - obs.y;
-      if (Math.sqrt(odx * odx + ody * ody) < obs.r + 12) {
-        player.speed = 0;
+      if (Math.sqrt(odx * odx + ody * ody) < obs.r + 14 && player.rampCooldown <= 0) {
+        player.speed = Math.min(player.speed * 1.5, MAX_SPEED * 1.3);
+        player.rampCooldown = 1.0;  // 1 second before another ramp can trigger
       }
     }
 

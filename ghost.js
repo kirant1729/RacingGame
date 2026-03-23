@@ -1,11 +1,13 @@
-// ghost.js — Three AI opponents that follow the track centerline
+// ghost.js — Three AI opponents following the oval centerline
 
-// AI opponents use the same waypoint list as the track centerline.
-// TRACK_WAYPOINTS is defined in track.js (loaded before this file).
+// Uses TRACK_WAYPOINTS from track.js (loaded first).
+// Speeds scaled for player MAX_SPEED = 600:
+//   orange 300, purple 400, cyan 480 px/s
+// Start positions evenly spaced at WP 0, 7, 14.
 var AI_CONFIG = [
-  { color: '#ff8c00', speed:  80, startWP:  0 },  // orange — easy
-  { color: '#a855f7', speed: 105, startWP: 13 },  // purple — medium
-  { color: '#22d3ee', speed: 130, startWP: 26 }   // cyan — challenging
+  { color: '#ff8c00', speed: 300, startWP:  0 },  // orange — easy
+  { color: '#a855f7', speed: 400, startWP:  7 },  // purple — medium
+  { color: '#22d3ee', speed: 480, startWP: 14 }   // cyan — challenging
 ];
 
 function Ghost(config) {
@@ -26,9 +28,8 @@ Ghost.prototype.update = function(dt) {
   var target = wps[this.wpIndex];
   var dx     = target.x - this.x;
   var dy     = target.y - this.y;
-  var dist   = Math.sqrt(dx * dx + dy * dy);
 
-  if (dist < 25) {
+  if (Math.sqrt(dx * dx + dy * dy) < 25) {
     this.wpIndex = (this.wpIndex + 1) % wps.length;
     target = wps[this.wpIndex];
     dx = target.x - this.x;

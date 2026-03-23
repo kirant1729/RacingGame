@@ -14,10 +14,14 @@ function Lap() {
   this.currentLapMs = 0;
   this.bestLapMs = Infinity;
   this.bestLapFlashTimer = 0;  // ms remaining for "NEW BEST!" display
-  this.lastX = null;           // car's previous x (for crossing detection)
   this.lastCrossTime = 0;      // timestamp of last valid crossing
   this.wrongWayTimer = 0;      // ms remaining for "WRONG WAY!" display
-  this.lastWrongWayTime = 0;   // timestamp of last wrong-way crossing
+  this.lastWrongWayTime = 0;
+  this.lastX = null;           // kept for wrong-way detection only
+  // armed: true once the car has been west of the finish zone, enabling the next
+  // east crossing to count as a lap. Fixes the bug where player starts east of
+  // the finish line and lastX never drops below FINISH_X on the first lap.
+  this.armed = false;
 }
 
 // Call every frame (pass car object and current timestamp)
@@ -27,21 +31,19 @@ Lap.prototype.update = function(car, now) {
   }
   this.currentLapMs = now - this.lapStartTime;
 
-  // Tick best-lap flash down
-  if (this.bestLapFlashTimer > 0) {
-    this.bestLapFlashTimer -= 16;
-  }
+  if (this.bestLapFlashTimer > 0) this.bestLapFlashTimer -= 16;
 
-  // --- Finish line crossing detection ---
-  // Car must be vertically within the finish stripe (on the track at the bottom)
-  var onTrack = car.y > (FINISH_Y - FINISH_HALF_H) && car.y < (FINISH_Y + FINISH_HALF_H);
-  // Detect car crossing x=400 from left to right (clockwise direction)
-  var crossed = onTrack && this.lastX !== null && this.lastX < FINISH_X && car.x >= FINISH_X;
+  var onTrack   = car.y > (FINISH_Y - FINISH_HALF_H) && car.y < (FINISH_Y + FINISH_HALF_H);
   var cooldownOk = (now - this.lastCrossTime) > MIN_LAP_TIME;
 
-  if (crossed && cooldownOk) {
+  // Arm the trigger once the car is clearly west of the finish line
+  if (car.x < FINISH_X - 80) this.armed = true;
+
+  // --- Lap crossing: car crosses x=FINISH_X going east while armed ---
+  var crossed = this.armed && onTrack && car.x >= FINISH_X && cooldownOk;
+
+  if (crossed) {
     if (this.lapCount > 0) {
-      // Record best lap
       if (this.currentLapMs < this.bestLapMs) {
         this.bestLapMs = this.currentLapMs;
         this.bestLapFlashTimer = 2500;
@@ -51,9 +53,10 @@ Lap.prototype.update = function(car, now) {
     this.lapStartTime = now;
     this.currentLapMs = 0;
     this.lastCrossTime = now;
+    this.armed = false;  // disarm until car goes west again
   }
 
-  // Wrong-way detection — car crossed finish line right-to-left
+  // --- Wrong-way detection: car crosses x=FINISH_X going west ---
   var wrongWay = onTrack && this.lastX !== null &&
                  this.lastX >= FINISH_X && car.x < FINISH_X &&
                  (now - this.lastWrongWayTime) > MIN_LAP_TIME;
