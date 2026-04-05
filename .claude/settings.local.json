@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git config:*)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(where npx:*)",
+      "Bash(where python:*)",
+      "Bash(where python3:*)",
+      "Bash(where py:*)",
+      "Bash(where node:*)",
+      "Read(//c/Program Files/**)",
+      "Bash(ls C:/Python*)",
+      "Bash(powershell -Command \"Get-Command node,npx,npm,python3,py -ErrorAction SilentlyContinue | Select-Object Name,Source; ls ''C:\\\\Program Files\\\\nodejs'' 2>$null | head -3; ls ''C:\\\\Users\\\\karan\\\\AppData\\\\Roaming\\\\npm'' 2>$null | head -3\")",
+      "Bash(powershell -Command \"Get-Command node,npx,npm -ErrorAction SilentlyContinue | Select-Object Name,Source\")",
+      "Bash(where deno:*)",
+      "Bash(where php:*)",
+      "Bash(where ruby:*)",
+      "Bash(where bun:*)",
+      "Bash(where wsl:*)",
+      "Bash(wsl -- which node)",
+      "Bash(wsl -- which python3)",
+      "Bash(wsl -- which npx)",
+      "Bash(powershell -Command \"Get-Command node,python,python3,npx,deno,php,ruby,bun -ErrorAction SilentlyContinue | Select-Object Name,Source\")",
+      "Bash(powershell -Command \"$PSVersionTable.PSVersion\")",
+      "Bash(powershell -Command \"Write-Host $PSVersionTable.PSVersion.Major\")",
+      "Bash(powershell -NoProfile -Command \"[System.Net.HttpListener]::IsSupported\")",
+      "Bash(where powershell:*)",
+      "Bash(netstat -ano)",
+      "Bash(findstr :3000)",
+      "Bash(findstr LISTEN)",
+      "Bash(powershell -NoProfile -Command \"Stop-Process -Name powershell -Force -ErrorAction SilentlyContinue; netsh http delete urlacl url=http://localhost:3000/ 2>$null; Start-Sleep 1; netstat -ano | findstr '':3000''\")",
+      "Bash(taskkill /F /IM powershell.exe)",
+      "Bash(powershell -NoProfile -Command \"taskkill /F /IM powershell.exe; Start-Sleep 2; netstat -ano | Select-String '':3000''\")",
+      "Bash(powershell -NoProfile -Command \"netstat -ano | Select-String '':3000''\")",
+      "Bash(where cmd:*)",
+      "Bash(git push:*)",
+      "Bash(gh repo:*)"
+    ]
+  }
+}
