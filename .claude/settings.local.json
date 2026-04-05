@@ -35,7 +35,9 @@
       "Bash(taskkill /F /IM powershell.exe)",
       "Bash(powershell -NoProfile -Command \"taskkill /F /IM powershell.exe; Start-Sleep 2; netstat -ano | Select-String '':3000''\")",
       "Bash(powershell -NoProfile -Command \"netstat -ano | Select-String '':3000''\")",
-      "Bash(where cmd:*)"
+      "Bash(where cmd:*)",
+      "Bash(git push:*)",
+      "Bash(gh repo:*)"
     ]
   }
 }
