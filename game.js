@@ -1,4 +1,4 @@
-// game.js — Main game loop with Mode 7 pseudo-3D rendering
+// game.js — Main game loop with top-down 2D rendering
 
 var canvas = document.getElementById('gameCanvas');
 var ctx    = canvas.getContext('2d');
@@ -6,9 +6,9 @@ var W      = canvas.width;   // 800
 var H      = canvas.height;  // 600
 
 // --- Rendering constants ---
-var HORIZON    = 300;   // screen y dividing sky and road
-var CAM_HEIGHT = 80;    // camera height above ground
-var FOCAL_LEN  = 250;   // perspective focal length
+// VIEW_SCALE: world units → screen pixels.
+// At 0.35 the track (280 u wide) occupies ~98 px; visible area ≈ 2286 × 1714 u.
+var VIEW_SCALE = 0.35;
 
 // --- Game state ---
 var STATE_START   = 'start';
@@ -26,8 +26,8 @@ var cam = { x: 0, y: 0, angle: 0 };
 
 function updateCamera() {
   cam.angle = player.angle;
-  cam.x     = player.x - Math.cos(player.angle) * 50;
-  cam.y     = player.y - Math.sin(player.angle) * 50;
+  cam.x     = player.x;
+  cam.y     = player.y;
 }
 
 // --- Input ---
@@ -60,210 +60,68 @@ document.addEventListener('keyup', function(e) {
 });
 
 // ─────────────────────────────────────────────
-// Pre-generate stars (static positions)
-// ─────────────────────────────────────────────
-var STARS = (function() {
-  var arr = [];
-  for (var i = 0; i < 200; i++) {
-    arr.push({
-      x: Math.random() * W,
-      y: Math.random() * (HORIZON - 30),
-      r: Math.random() < 0.12 ? 1.4 : 0.6,
-      a: 0.3 + Math.random() * 0.7
-    });
-  }
-  return arr;
-}());
-
-// ─────────────────────────────────────────────
-// Pre-generate futuristic city buildings
-// ─────────────────────────────────────────────
-var NEON_COLS = ['#00ffff', '#ff00ff', '#ff6600', '#00ff88', '#ffff00', '#ff2266'];
-var DARK_COLS = ['#070c18', '#0a1020', '#060810', '#0c1428', '#080a14'];
-
-var CITY = (function() {
-  var arr = [];
-  for (var i = 0; i < 120; i++) {
-    var h     = 38 + Math.random() * 200;
-    var w     = 16 + Math.random() * 44;
-    var wRows = Math.max(1, Math.floor(h / 18));
-    var wCols = Math.max(1, Math.floor(w / 9));
-    // Pre-bake lit/unlit windows so they don't flicker
-    var wins = [];
-    for (var r = 0; r < wRows; r++) {
-      wins.push([]);
-      for (var c = 0; c < wCols; c++) {
-        wins[r].push(Math.random() > 0.35);
-      }
-    }
-    arr.push({
-      angle:    (i / 120) * Math.PI * 2,
-      h: h, w: w,
-      color:    DARK_COLS[i % DARK_COLS.length],
-      neon:     NEON_COLS[i % NEON_COLS.length],
-      wRows: wRows, wCols: wCols, wins: wins,
-      hasSpire: Math.random() > 0.55,
-      spireH:   12 + Math.random() * 50
-    });
-  }
-  return arr;
-}());
-
-// Pre-allocated road ImageData (reused every frame — no GC pressure)
-var roadImg = ctx.createImageData(W, H - HORIZON);
-
-// ─────────────────────────────────────────────
-// Draw sky gradient + stars + city skyline
-// ─────────────────────────────────────────────
-function drawBackground() {
-  // Sky gradient
-  var sg = ctx.createLinearGradient(0, 0, 0, HORIZON);
-  sg.addColorStop(0,   '#000008');
-  sg.addColorStop(0.6, '#06062c');
-  sg.addColorStop(1,   '#1a0840');
-  ctx.fillStyle = sg;
-  ctx.fillRect(0, 0, W, HORIZON);
-
-  // Stars
-  for (var i = 0; i < STARS.length; i++) {
-    var s = STARS[i];
-    ctx.globalAlpha = s.a;
-    ctx.fillStyle   = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-
-  // Horizon purple glow
-  var hg = ctx.createLinearGradient(0, HORIZON - 90, 0, HORIZON);
-  hg.addColorStop(0, 'rgba(40,0,100,0)');
-  hg.addColorStop(1, 'rgba(100,30,220,0.4)');
-  ctx.fillStyle = hg;
-  ctx.fillRect(0, HORIZON - 90, W, 90);
-
-  // ── City buildings ──────────────────────────
-  var normAngle = ((cam.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-  var FOV       = Math.PI * 0.72;   // ~130° horizontal FOV for buildings
-  var pxPerRad  = W / FOV;
-
-  for (var j = 0; j < CITY.length; j++) {
-    var b  = CITY[j];
-    var da = b.angle - normAngle;
-    if (da >  Math.PI) da -= Math.PI * 2;
-    if (da < -Math.PI) da += Math.PI * 2;
-    if (Math.abs(da) > FOV * 0.58) continue;   // outside view
-
-    var bx   = Math.round(W / 2 + da * pxPerRad);
-    var bTop = HORIZON - b.h;
-
-    // Building body
-    ctx.fillStyle = b.color;
-    ctx.fillRect(bx - b.w / 2, bTop, b.w, b.h);
-
-    // Neon edge outline
-    ctx.strokeStyle = b.neon;
-    ctx.lineWidth   = 1;
-    ctx.strokeRect(bx - b.w / 2 + 0.5, bTop + 0.5, b.w - 1, b.h - 1);
-
-    // Spire
-    if (b.hasSpire) {
-      ctx.strokeStyle = b.neon;
-      ctx.lineWidth   = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(bx, bTop);
-      ctx.lineTo(bx, bTop - b.spireH);
-      ctx.stroke();
-    }
-
-    // Windows
-    var ww = Math.max(2, b.w / b.wCols - 2);
-    for (var rr = 0; rr < b.wRows; rr++) {
-      for (var cc = 0; cc < b.wCols; cc++) {
-        if (b.wins[rr][cc]) {
-          ctx.fillStyle = 'rgba(255,220,80,0.65)';
-          ctx.fillRect(
-            bx - b.w / 2 + 2 + cc * (b.w / b.wCols),
-            bTop + 4 + rr * 18,
-            ww, 11
-          );
-        }
-      }
-    }
-  }
-}
-
-// ─────────────────────────────────────────────
-// Speed-boost ramps (small yellow wedges)
+// Speed-boost ramps
 // ─────────────────────────────────────────────
 var OBSTACLES = [
-  {x: 2870, y: 1300, r: 12},  // T1 entry
-  {x: 3080, y: 1500, r: 12},  // right apex
-  {x: 2870, y: 1700, r: 12},  // T2 exit
-  {x: 1800, y: 2000, r: 12},  // back straight mid
-  {x: 1400, y: 2000, r: 12},  // back straight mid
-  {x:  330, y: 1700, r: 12},  // T3 entry
-  {x:  120, y: 1500, r: 12},  // left apex
-  {x:  330, y: 1300, r: 12},  // T4 exit
+  {x: 2870, y: 1300, r: 12},
+  {x: 3080, y: 1500, r: 12},
+  {x: 2870, y: 1700, r: 12},
+  {x: 1800, y: 2000, r: 12},
+  {x: 1400, y: 2000, r: 12},
+  {x:  330, y: 1700, r: 12},
+  {x:  120, y: 1500, r: 12},
+  {x:  330, y: 1300, r: 12},
 ];
 
+// Pre-allocated full-screen ImageData (reused every frame — avoids GC pressure)
+var tdImg = ctx.createImageData(W, H);
+
 // ─────────────────────────────────────────────
-// Mode 7 scanline road renderer (grid-based)
+// Top-down track renderer (ImageData pixel loop — same perf as Mode 7)
 // ─────────────────────────────────────────────
-function drawRoad() {
-  var px   = roadImg.data;
-  var cosA = Math.cos(cam.angle);
-  var sinA = Math.sin(cam.angle);
+function drawTopDown() {
+  var px  = tdImg.data;
+  var ox  = player.x;
+  var oy  = player.y;
+  var vs  = VIEW_SCALE;
+  var inv = 1 / vs;        // multiply is faster than divide in the inner loop
 
-  for (var row = 0; row < H - HORIZON; row += 2) {
-    var rowFH = row + 1;
-    var depth = CAM_HEIGHT * FOCAL_LEN / rowFH;
-    var dof   = depth / FOCAL_LEN;
+  for (var sy = 0; sy < H; sy += 2) {
+    var wy = oy + (sy - H / 2) * inv;
 
-    var wxL = cam.x + cosA * depth + sinA * (W / 2) * dof;
-    var wyL = cam.y + sinA * depth - cosA * (W / 2) * dof;
-    var wxS = -sinA * dof;
-    var wyS =  cosA * dof;
-
-    // Depth band for road striping
-    var band = (Math.floor(depth / 60) & 1);
-
-    var wx = wxL, wy = wyL;
-
-    for (var col = 0; col < W; col += 2) {
-      var r, g, b;
-
-      // Grid lookup — O(1), no ellipse math
+    for (var sx = 0; sx < W; sx += 2) {
+      var wx   = ox + (sx - W / 2) * inv;
       var gx   = wx / GRID_CELL | 0;
       var gy   = wy / GRID_CELL | 0;
       var cell = (gx >= 0 && gx < GRID_W && gy >= 0 && gy < GRID_H)
                  ? GRID[gy * GRID_W + gx] : 0;
 
+      var r, g, b;
+
       if (cell === 3) {
-        // Finish line — checkered flag
-        var fc = (((wx / 10 | 0) + (wy / 10 | 0)) & 1);
+        // Finish line — checkered
+        var fc = (((wx / 8 | 0) + (wy / 8 | 0)) & 1);
         if (fc) { r = 255; g = 255; b = 255; }
-        else    { r = 0;   g = 0;   b = 0; }
+        else    { r = 20;  g = 20;  b = 20;  }
 
       } else if (cell === 2) {
-        // Road asphalt — alternating bands give depth cue
-        if (band) { r = 82; g = 82; b = 88; }
-        else      { r = 66; g = 66; b = 72; }
+        // Road asphalt
+        r = 70; g = 70; b = 78;
 
       } else if (cell === 1) {
-        // Curb — red / white alternating blocks
-        var cb = ((Math.floor(wx / 12) ^ Math.floor(wy / 12)) & 1);
-        if (cb) { r = 210; g = 18; b = 18; }
-        else    { r = 235; g = 235; b = 235; }
+        // Curb — per-cell red/white alternating (wall visual)
+        if ((gx + gy) & 1) { r = 200; g = 30;  b = 30;  }
+        else                { r = 228; g = 228; b = 228; }
 
       } else {
-        // Grass — subtle checkerboard
-        var chk = ((Math.floor(wx / 50) ^ Math.floor(wy / 50)) & 1);
-        if (chk) { r = 42; g = 88; b = 40; }
-        else     { r = 54; g = 108; b = 50; }
+        // Grass — subtle large checker for depth
+        var chk = ((Math.floor(wx / 80) ^ Math.floor(wy / 80)) & 1);
+        if (chk) { r = 40; g = 88; b = 38; }
+        else     { r = 52; g = 106; b = 50; }
       }
 
-      var i00 = (row * W + col) * 4;
+      // Write 2×2 block
+      var i00 = (sy * W + sx) * 4;
       var i01 = i00 + 4;
       var i10 = i00 + W * 4;
       var i11 = i10 + 4;
@@ -272,195 +130,76 @@ function drawRoad() {
       px[i00+1] = px[i01+1] = px[i10+1] = px[i11+1] = g;
       px[i00+2] = px[i01+2] = px[i10+2] = px[i11+2] = b;
       px[i00+3] = px[i01+3] = px[i10+3] = px[i11+3] = 255;
-
-      wx += wxS * 2;
-      wy += wyS * 2;
     }
   }
 
-  ctx.putImageData(roadImg, 0, HORIZON);
+  ctx.putImageData(tdImg, 0, 0);
 }
 
 // ─────────────────────────────────────────────
-// Draw track walls as Armco barriers (Mode 7)
+// Draw speed-boost ramps as top-down triangles
 // ─────────────────────────────────────────────
-function drawWalls() {
-  var cosA = Math.cos(cam.angle);
-  var sinA = Math.sin(cam.angle);
-
-  for (var col = 0; col < W; col += 2) {
-    var prevCell = -1;
-    for (var row = 0; row < H - HORIZON; row += 2) {
-      var rowFH = row + 1;
-      var depth = CAM_HEIGHT * FOCAL_LEN / rowFH;
-      var dof   = depth / FOCAL_LEN;
-      var lat   = (col - W / 2) * dof;
-      var wx    = cam.x + cosA * depth - sinA * lat;
-      var wy    = cam.y + sinA * depth + cosA * lat;
-      var cell  = track.getCell(wx, wy);
-
-      if (prevCell >= 1 && cell === 0) {
-        var screenY = HORIZON + row;
-        var wallH   = Math.max(3, CAM_HEIGHT * 0.65 * FOCAL_LEN / depth);
-        // Armco red/white stripe pattern based on depth
-        var stripe  = (Math.floor(depth / 120) & 1);
-        ctx.fillStyle = stripe ? '#cc2222' : '#eeeeee';
-        ctx.fillRect(col, screenY - wallH, 2, wallH);
-        break;
-      }
-      prevCell = cell;
-    }
-  }
-}
-
-// ─────────────────────────────────────────────
-// Draw speed-boost ramps as 3D yellow wedges
-// ─────────────────────────────────────────────
-function drawObstacles() {
-  var cosA = Math.cos(cam.angle);
-  var sinA = Math.sin(cam.angle);
-
+function drawObstaclesTopDown() {
   for (var i = 0; i < OBSTACLES.length; i++) {
     var obs = OBSTACLES[i];
-    var dx  = obs.x - cam.x;
-    var dy  = obs.y - cam.y;
-    var fwd = dx * cosA + dy * sinA;
-    if (fwd < 10) continue;
-    var lat = -dx * sinA + dy * cosA;
-    var sx  = W / 2 + lat * FOCAL_LEN / fwd;
-    var sy  = HORIZON + CAM_HEIGHT * FOCAL_LEN / fwd;
-    var sc  = FOCAL_LEN / fwd;
-    var sw  = Math.max(6, obs.r * 2.5 * sc);
-    var sh  = Math.max(4, obs.r * 2.0 * sc);
-    if (sx < -sw || sx > W + sw || sy > H) continue;
+    var sx  = Math.round(W / 2 + (obs.x - player.x) * VIEW_SCALE);
+    var sy  = Math.round(H / 2 + (obs.y - player.y) * VIEW_SCALE);
+    var sr  = Math.max(4, obs.r * VIEW_SCALE);
+    if (sx < -sr || sx > W + sr || sy < -sr || sy > H + sr) continue;
 
-    // Ramp wedge — orange base, yellow top, white stripe
     ctx.fillStyle = '#ff6600';
     ctx.beginPath();
-    ctx.moveTo(sx - sw / 2, sy);           // bottom-left
-    ctx.lineTo(sx + sw / 2, sy);           // bottom-right
-    ctx.lineTo(sx + sw / 2, sy - sh * 0.5); // right mid
-    ctx.lineTo(sx,          sy - sh);      // top-center apex
-    ctx.lineTo(sx - sw / 2, sy - sh * 0.5); // left mid
+    ctx.moveTo(sx,      sy - sr);
+    ctx.lineTo(sx + sr, sy + sr);
+    ctx.lineTo(sx - sr, sy + sr);
     ctx.closePath();
     ctx.fill();
 
-    // Yellow highlight stripe
     ctx.fillStyle = '#ffee00';
     ctx.beginPath();
-    ctx.moveTo(sx - sw * 0.25, sy - sh * 0.4);
-    ctx.lineTo(sx + sw * 0.25, sy - sh * 0.4);
-    ctx.lineTo(sx,             sy - sh * 0.9);
-    ctx.closePath();
+    ctx.arc(sx, sy, Math.max(2, sr * 0.4), 0, Math.PI * 2);
     ctx.fill();
-
-    // Thin outline
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-    ctx.lineWidth   = Math.max(1, sc);
-    ctx.beginPath();
-    ctx.moveTo(sx - sw / 2, sy);
-    ctx.lineTo(sx + sw / 2, sy);
-    ctx.lineTo(sx + sw / 2, sy - sh * 0.5);
-    ctx.lineTo(sx,          sy - sh);
-    ctx.lineTo(sx - sw / 2, sy - sh * 0.5);
-    ctx.closePath();
-    ctx.stroke();
   }
 }
 
 // ─────────────────────────────────────────────
-// Draw player car hood / cockpit view
+// Draw player car from above (centered on screen)
 // ─────────────────────────────────────────────
-function drawCarHood() {
-  var hw = W / 2;
+function drawPlayerCar() {
+  var CSCALE = 5;   // inflate car sprite: world units × CSCALE × VIEW_SCALE
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  ctx.rotate(player.angle);
 
-  // ── Side pods (visible on each side) ─────────
+  var w = player.width  * CSCALE * VIEW_SCALE;   // ≈ 38 px
+  var h = player.height * CSCALE * VIEW_SCALE;   // ≈ 21 px
+
+  // Body
   ctx.fillStyle = player.color;
+  ctx.fillRect(-w / 2, -h / 2, w, h);
+
+  // Windshield (front half of car — front is +x after rotate)
+  ctx.fillStyle = 'rgba(150,220,255,0.75)';
+  ctx.fillRect(-w / 2 + w * 0.55, -h / 2 + h * 0.15, w * 0.30, h * 0.70);
+
+  // Rear window
+  ctx.fillStyle = 'rgba(150,220,255,0.45)';
+  ctx.fillRect(-w / 2 + w * 0.05, -h / 2 + h * 0.15, w * 0.15, h * 0.70);
+
+  // Wheels (4 corners)
+  ctx.fillStyle = '#111';
+  ctx.fillRect(-w / 2 - 2,         -h / 2 - 3, w * 0.22, 3);   // front-left
+  ctx.fillRect(-w / 2 - 2,          h / 2,      w * 0.22, 3);   // front-right
+  ctx.fillRect( w / 2 - w * 0.18,  -h / 2 - 3, w * 0.22, 3);   // rear-left
+  ctx.fillRect( w / 2 - w * 0.18,   h / 2,      w * 0.22, 3);   // rear-right
+
+  // White nose dot (direction indicator)
+  ctx.fillStyle = '#fff';
   ctx.beginPath();
-  ctx.moveTo(0,         H);
-  ctx.lineTo(hw - 90,   H);
-  ctx.lineTo(hw - 70,   H - 115);
-  ctx.lineTo(0,         H - 80);
-  ctx.closePath();
+  ctx.arc(w / 2 + 3, 0, 3, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.beginPath();
-  ctx.moveTo(W,         H);
-  ctx.lineTo(hw + 90,   H);
-  ctx.lineTo(hw + 70,   H - 115);
-  ctx.lineTo(W,         H - 80);
-  ctx.closePath();
-  ctx.fill();
-
-  // ── Main hood (narrow nose cone perspective) ──
-  ctx.fillStyle = player.color;
-  ctx.beginPath();
-  ctx.moveTo(hw - 90,  H);
-  ctx.lineTo(hw + 90,  H);
-  ctx.lineTo(hw + 38,  H - 115);
-  ctx.lineTo(hw - 38,  H - 115);
-  ctx.closePath();
-  ctx.fill();
-
-  // Hood sheen
-  ctx.fillStyle = 'rgba(255,255,255,0.13)';
-  ctx.beginPath();
-  ctx.moveTo(hw - 80,  H);
-  ctx.lineTo(hw - 10,  H);
-  ctx.lineTo(hw - 18,  H - 115);
-  ctx.lineTo(hw - 38,  H - 115);
-  ctx.closePath();
-  ctx.fill();
-
-  // ── Dashboard bar ─────────────────────────────
-  ctx.fillStyle = '#0d0d0d';
-  ctx.fillRect(0, H - 118, W, 18);
-
-  // ── Cockpit opening (dark visor area) ─────────
-  ctx.fillStyle = '#060612';
-  ctx.beginPath();
-  ctx.ellipse(hw, H - 118, 48, 20, 0, Math.PI, Math.PI * 2);
-  ctx.fill();
-
-  // ── Helmet inside cockpit ─────────────────────
-  // Helmet body
-  ctx.fillStyle = player.color;
-  ctx.beginPath();
-  ctx.ellipse(hw, H - 132, 22, 18, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // Visor
-  ctx.fillStyle = 'rgba(80,200,255,0.75)';
-  ctx.beginPath();
-  ctx.ellipse(hw + 6, H - 132, 14, 10, -0.2, 0, Math.PI * 2);
-  ctx.fill();
-  // Visor glint
-  ctx.fillStyle = 'rgba(255,255,255,0.6)';
-  ctx.beginPath();
-  ctx.ellipse(hw + 2, H - 137, 5, 3, -0.3, 0, Math.PI * 2);
-  ctx.fill();
-
-  // ── Roll hoop ────────────────────────────────
-  ctx.fillStyle = '#1a1a1a';
-  ctx.fillRect(hw - 6, H - 160, 12, 42);
-  ctx.fillStyle = '#333';
-  ctx.fillRect(hw - 22, H - 162, 44, 6);
-
-  // ── Headlights ────────────────────────────────
-  ctx.fillStyle = 'rgba(255,252,190,0.95)';
-  ctx.beginPath();
-  ctx.ellipse(hw - 32, H - 120, 8, 4, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(hw + 32, H - 120, 8, 4, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // Glow
-  ctx.fillStyle = 'rgba(200,230,255,0.45)';
-  ctx.beginPath();
-  ctx.ellipse(hw - 32, H - 120, 4, 2, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(hw + 32, H - 120, 4, 2, 0, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.restore();
 }
 
 // ─────────────────────────────────────────────
@@ -469,7 +208,7 @@ function drawCarHood() {
 function drawSpeedometer(speed) {
   var barMaxW = 160, barH = 12;
   var barX    = W - barMaxW - 16;
-  var barY    = H - 155;   // above the car hood
+  var barY    = H - 48;
   var frac    = Math.min(speed / MAX_SPEED, 1);
   var barW    = Math.round(barMaxW * frac);
   var kmh     = Math.round(speed * 0.72);
@@ -498,11 +237,9 @@ function drawSpeedometer(speed) {
 // ─────────────────────────────────────────────
 function drawStartScreen() {
   updateCamera();
-  drawBackground();
-  drawRoad();
-  drawWalls();
-  drawObstacles();
-  drawCarHood();
+  drawTopDown();
+  drawObstaclesTopDown();
+  drawPlayerCar();
 
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.64)';
@@ -559,11 +296,10 @@ function loop(timestamp) {
   lastTime = timestamp;
 
   if (gameState === STATE_PLAYING) {
-    // Save position before update for wall collision revert
     var prevX = player.x, prevY = player.y;
     player.update(dt, keys, track);
 
-    // Wall collision — if car drives onto grass, revert and bounce
+    // Wall collision — revert to previous position and bounce if car hits grass
     if (track.getCell(player.x, player.y) === 0) {
       player.x = prevX;
       player.y = prevY;
@@ -579,15 +315,13 @@ function loop(timestamp) {
       var odx = player.x - obs.x, ody = player.y - obs.y;
       if (Math.sqrt(odx * odx + ody * ody) < obs.r + 14 && player.rampCooldown <= 0) {
         player.speed = Math.min(player.speed * 1.5, MAX_SPEED * 1.3);
-        player.rampCooldown = 1.0;  // 1 second before another ramp can trigger
+        player.rampCooldown = 1.0;
       }
     }
 
-    drawBackground();
-    drawRoad();
-    drawWalls();
-    drawObstacles();
-    drawCarHood();
+    drawTopDown();
+    drawObstaclesTopDown();
+    drawPlayerCar();
     lap.drawHUD(ctx);
     lap.drawLeaderboard(ctx);
     lap.drawWrongWay(ctx);
@@ -599,11 +333,9 @@ function loop(timestamp) {
 
   } else if (gameState === STATE_PAUSED) {
     updateCamera();
-    drawBackground();
-    drawRoad();
-    drawWalls();
-    drawObstacles();
-    drawCarHood();
+    drawTopDown();
+    drawObstaclesTopDown();
+    drawPlayerCar();
     lap.drawHUD(ctx);
     lap.drawLeaderboard(ctx);
     var pauseSpd = player.offTrack ? Math.abs(player.speed) * OFFTRACK_MULT : Math.abs(player.speed);
