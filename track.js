@@ -2,47 +2,45 @@
 
 var TRACK_HALF_W = 140;  // half-width of track in world units (track is 280 wide)
 
-// Simple NASCAR-style oval: two straights connected by two semicircles.
-// Front straight: east (increasing x) at y=1200.
-// Back  straight: west (decreasing x) at y=1700.
-// Right semicircle: center (1800, 1450), radius 250 — connects front to back.
-// Left  semicircle: center  (400, 1450), radius 250 — connects back to front.
-// Finish line: x=500, y=1200 (crossed left-to-right = clockwise lap).
+// NASCAR-style oval — bigger and longer than before.
+// Front straight: east (increasing x) at y=1000, x: 600→2600.
+// Back  straight: west (decreasing x) at y=2000, x: 600→2600.
+// Right semicircle: center (2600, 1500), radius 500.
+// Left  semicircle: center  (600, 1500), radius 500.
+// Finish line: x=700, y=1000 (crossed left-to-right = clockwise lap).
 var TRACK_WAYPOINTS = [
-  // Front straight (heading east, y=1200)
-  {x:  400, y: 1200},  //  0  start / Turn 4 exit
-  {x:  500, y: 1200},  //  1  FINISH LINE
-  {x:  700, y: 1200},  //  2
-  {x:  950, y: 1200},  //  3
-  {x: 1200, y: 1200},  //  4
-  {x: 1450, y: 1200},  //  5
-  {x: 1650, y: 1200},  //  6  front straight end
-  // Right semicircle (Turn 1 / Turn 2) — center (1800, 1450), r=250
-  {x: 1800, y: 1200},  //  7  entry (angle −π/2)
-  {x: 1977, y: 1273},  //  8  (angle −π/4)
-  {x: 2050, y: 1450},  //  9  apex (angle 0)
-  {x: 1977, y: 1627},  // 10  (angle +π/4)
-  {x: 1800, y: 1700},  // 11  exit (angle +π/2)
-  // Back straight (heading west, y=1700)
-  {x: 1600, y: 1700},  // 12
-  {x: 1350, y: 1700},  // 13
-  {x: 1100, y: 1700},  // 14
-  {x:  850, y: 1700},  // 15
-  {x:  600, y: 1700},  // 16
-  {x:  400, y: 1700},  // 17  back straight end
-  // Left semicircle (Turn 3 / Turn 4) — center (400, 1450), r=250
-  {x:  223, y: 1627},  // 18  (angle +3π/4)
-  {x:  150, y: 1450},  // 19  apex (angle π)
-  {x:  223, y: 1273},  // 20  (angle +5π/4)
-  // closes back to WP 0 (400, 1200)
+  // Front straight (heading east, y=1000)
+  {x:  600, y: 1000},  //  0  Turn 4 exit / start
+  {x:  700, y: 1000},  //  1  FINISH LINE
+  {x: 1000, y: 1000},  //  2
+  {x: 1400, y: 1000},  //  3
+  {x: 1800, y: 1000},  //  4
+  {x: 2200, y: 1000},  //  5
+  {x: 2600, y: 1000},  //  6  front straight end / T1 entry
+  // Right semicircle (Turn 1 / Turn 2) — center (2600, 1500), r=500
+  {x: 2954, y: 1146},  //  7  angle = −π/4
+  {x: 3100, y: 1500},  //  8  apex (angle = 0)
+  {x: 2954, y: 1854},  //  9  angle = +π/4
+  {x: 2600, y: 2000},  // 10  T2 exit (angle = +π/2)
+  // Back straight (heading west, y=2000)
+  {x: 2200, y: 2000},  // 11
+  {x: 1800, y: 2000},  // 12
+  {x: 1400, y: 2000},  // 13
+  {x: 1000, y: 2000},  // 14
+  {x:  600, y: 2000},  // 15  back straight end / T3 entry
+  // Left semicircle (Turn 3 / Turn 4) — center (600, 1500), r=500
+  {x:  246, y: 1854},  // 16  angle = +3π/4
+  {x:  100, y: 1500},  // 17  apex (angle = π)
+  {x:  246, y: 1146},  // 18  angle = +5π/4
+  // closes back to WP 0 (600, 1000)
 ];
 
 // ─── Bitmap grid ─────────────────────────────────────────────────────────────
-// World: 2800 × 2400 units.  Cell = 20 → grid 140 × 120 = 16 800 cells.
+// World: 3600 × 3000 units.  Cell = 20 → grid 180 × 150 = 27 000 cells.
 // Values: 0 = grass, 1 = curb, 2 = road, 3 = finish.
 var GRID_CELL = 20;
-var GRID_W    = 140;
-var GRID_H    = 120;
+var GRID_W    = 180;
+var GRID_H    = 150;
 var GRID      = new Uint8Array(GRID_W * GRID_H);
 
 (function buildGrid() {
@@ -84,11 +82,11 @@ var GRID      = new Uint8Array(GRID_W * GRID_H);
     }
   }
 
-  // Finish line strip — x ≈ 500, y = 1200 ± 80 → value 3
-  var fxMin = Math.max(0,          Math.floor(480 / GRID_CELL));
-  var fxMax = Math.min(GRID_W - 1, Math.floor(520 / GRID_CELL));
-  var fyMin = Math.max(0,          Math.floor(1120 / GRID_CELL));
-  var fyMax = Math.min(GRID_H - 1, Math.floor(1280 / GRID_CELL));
+  // Finish line strip — x ≈ 700, y = 1000 ± 80 → value 3
+  var fxMin = Math.max(0,          Math.floor(680 / GRID_CELL));
+  var fxMax = Math.min(GRID_W - 1, Math.floor(720 / GRID_CELL));
+  var fyMin = Math.max(0,          Math.floor(920 / GRID_CELL));
+  var fyMax = Math.min(GRID_H - 1, Math.floor(1080 / GRID_CELL));
   for (var gy2 = fyMin; gy2 <= fyMax; gy2++) {
     for (var gx2 = fxMin; gx2 <= fxMax; gx2++) {
       if (GRID[gy2 * GRID_W + gx2] >= 2) GRID[gy2 * GRID_W + gx2] = 3;

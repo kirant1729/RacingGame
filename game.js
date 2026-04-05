@@ -18,7 +18,7 @@ var gameState     = STATE_START;
 
 // --- Game objects ---
 var track  = new Track(TRACK_CONFIG);
-var player = new Car(600, 1200, 0, '#e94560');
+var player = new Car(800, 1000, 0, '#e94560');
 var lap    = new Lap();
 
 // --- Camera ---
@@ -197,14 +197,14 @@ function drawBackground() {
 // Speed-boost ramps (small yellow wedges)
 // ─────────────────────────────────────────────
 var OBSTACLES = [
-  {x: 1870, y: 1360, r: 12},  // Turn 1 entry
-  {x: 2040, y: 1450, r: 12},  // Right apex
-  {x: 1870, y: 1640, r: 12},  // Turn 2 exit
-  {x: 1250, y: 1700, r: 12},  // Back straight mid
-  {x:  750, y: 1700, r: 12},  // Back straight mid
-  {x:  230, y: 1640, r: 12},  // Turn 3 entry
-  {x:  160, y: 1450, r: 12},  // Left apex
-  {x:  230, y: 1260, r: 12}   // Turn 4 exit
+  {x: 2870, y: 1300, r: 12},  // T1 entry
+  {x: 3080, y: 1500, r: 12},  // right apex
+  {x: 2870, y: 1700, r: 12},  // T2 exit
+  {x: 1800, y: 2000, r: 12},  // back straight mid
+  {x: 1400, y: 2000, r: 12},  // back straight mid
+  {x:  330, y: 1700, r: 12},  // T3 entry
+  {x:  120, y: 1500, r: 12},  // left apex
+  {x:  330, y: 1300, r: 12},  // T4 exit
 ];
 
 // ─────────────────────────────────────────────
@@ -282,6 +282,38 @@ function drawRoad() {
 }
 
 // ─────────────────────────────────────────────
+// Draw track walls as Armco barriers (Mode 7)
+// ─────────────────────────────────────────────
+function drawWalls() {
+  var cosA = Math.cos(cam.angle);
+  var sinA = Math.sin(cam.angle);
+
+  for (var col = 0; col < W; col += 2) {
+    var prevCell = -1;
+    for (var row = 0; row < H - HORIZON; row += 2) {
+      var rowFH = row + 1;
+      var depth = CAM_HEIGHT * FOCAL_LEN / rowFH;
+      var dof   = depth / FOCAL_LEN;
+      var lat   = (col - W / 2) * dof;
+      var wx    = cam.x + cosA * depth - sinA * lat;
+      var wy    = cam.y + sinA * depth + cosA * lat;
+      var cell  = track.getCell(wx, wy);
+
+      if (prevCell >= 1 && cell === 0) {
+        var screenY = HORIZON + row;
+        var wallH   = Math.max(3, CAM_HEIGHT * 0.65 * FOCAL_LEN / depth);
+        // Armco red/white stripe pattern based on depth
+        var stripe  = (Math.floor(depth / 120) & 1);
+        ctx.fillStyle = stripe ? '#cc2222' : '#eeeeee';
+        ctx.fillRect(col, screenY - wallH, 2, wallH);
+        break;
+      }
+      prevCell = cell;
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
 // Draw speed-boost ramps as 3D yellow wedges
 // ─────────────────────────────────────────────
 function drawObstacles() {
@@ -333,98 +365,6 @@ function drawObstacles() {
     ctx.lineTo(sx - sw / 2, sy - sh * 0.5);
     ctx.closePath();
     ctx.stroke();
-  }
-}
-
-// ─────────────────────────────────────────────
-// Draw opponent cars as realistic 3D sprites
-// ─────────────────────────────────────────────
-function drawOpponents() {
-  var cosA = Math.cos(cam.angle);
-  var sinA = Math.sin(cam.angle);
-
-  var visible = [];
-  for (var i = 0; i < ghosts.length; i++) {
-    var gh  = ghosts[i];
-    var dx  = gh.x - cam.x, dy = gh.y - cam.y;
-    var fwd = dx * cosA + dy * sinA;
-    var lat = -dx * sinA + dy * cosA;
-    if (fwd < 15) continue;
-    var sx = W / 2 + lat * FOCAL_LEN / fwd;
-    var sy = HORIZON + CAM_HEIGHT * FOCAL_LEN / fwd;
-    var sc = FOCAL_LEN / fwd;
-    if (sx < -100 || sx > W + 100 || sy > H - 80) continue;
-    visible.push({ ghost: gh, sx: sx, sy: sy, sc: sc, depth: fwd });
-  }
-  visible.sort(function(a, b) { return b.depth - a.depth; });
-
-  for (var j = 0; j < visible.length; j++) {
-    var v  = visible[j];
-    var cw = Math.max(10, 52 * v.sc);   // car width
-    var ch = Math.max(5,  28 * v.sc);   // car height
-    var bx = v.sx, by = v.sy;
-    var col = v.ghost.color;
-
-    // ── Rear diffuser (wide dark base) ──────────
-    ctx.fillStyle = '#111';
-    ctx.fillRect(bx - cw * 0.62, by - ch * 0.22, cw * 1.24, ch * 0.22);
-
-    // ── Side pods (flanking lower body) ─────────
-    ctx.fillStyle = col;
-    ctx.fillRect(bx - cw * 0.60, by - ch * 0.75, cw * 0.17, ch * 0.55);
-    ctx.fillRect(bx + cw * 0.43, by - ch * 0.75, cw * 0.17, ch * 0.55);
-
-    // ── Main body ───────────────────────────────
-    ctx.fillStyle = col;
-    ctx.fillRect(bx - cw * 0.42, by - ch, cw * 0.84, ch);
-
-    // ── Livery accent stripe ─────────────────────
-    ctx.fillStyle = 'rgba(255,255,255,0.22)';
-    ctx.fillRect(bx - cw * 0.40, by - ch, cw * 0.08, ch * 0.85);
-
-    // ── Rear wing (wide, thin, above body) ──────
-    ctx.fillStyle = '#222';
-    ctx.fillRect(bx - cw * 0.56, by - ch - ch * 0.18, cw * 1.12, ch * 0.12);
-    // Wing endplates
-    ctx.fillStyle = col;
-    ctx.fillRect(bx - cw * 0.60, by - ch - ch * 0.22, cw * 0.08, ch * 0.22);
-    ctx.fillRect(bx + cw * 0.52, by - ch - ch * 0.22, cw * 0.08, ch * 0.22);
-
-    // ── Cockpit / roll hoop ──────────────────────
-    ctx.fillStyle = '#0a0a1a';
-    ctx.beginPath();
-    ctx.ellipse(bx - cw * 0.06, by - ch * 0.72,
-                cw * 0.20, ch * 0.32, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Roll hoop bar
-    ctx.fillStyle = '#333';
-    ctx.fillRect(bx - cw * 0.04, by - ch - ch * 0.05, cw * 0.08, ch * 0.40);
-
-    // ── Nose cone (pointed front) ────────────────
-    ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.moveTo(bx + cw * 0.42, by - ch * 0.75);
-    ctx.lineTo(bx + cw * 0.65, by - ch * 0.35);
-    ctx.lineTo(bx + cw * 0.42, by - ch * 0.10);
-    ctx.closePath();
-    ctx.fill();
-
-    // ── Front wing ───────────────────────────────
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(bx + cw * 0.38, by - ch * 0.14, cw * 0.28, ch * 0.08);
-
-    // ── Wheels (dark, wide) ──────────────────────
-    ctx.fillStyle = '#111';
-    // Rear (left on screen = car's left)
-    ctx.fillRect(bx - cw * 0.62, by - ch * 0.36, cw * 0.20, ch * 0.36);
-    // Rear right
-    ctx.fillRect(bx + cw * 0.42, by - ch * 0.36, cw * 0.20, ch * 0.36);
-
-    // Tyre highlight
-    ctx.fillStyle = 'rgba(80,80,80,0.7)';
-    ctx.fillRect(bx - cw * 0.60, by - ch * 0.34, cw * 0.05, ch * 0.30);
-    ctx.fillRect(bx + cw * 0.55, by - ch * 0.34, cw * 0.05, ch * 0.30);
   }
 }
 
@@ -560,8 +500,8 @@ function drawStartScreen() {
   updateCamera();
   drawBackground();
   drawRoad();
+  drawWalls();
   drawObstacles();
-  drawOpponents();
   drawCarHood();
 
   ctx.save();
@@ -575,7 +515,7 @@ function drawStartScreen() {
 
   ctx.fillStyle = '#00ffff';
   ctx.font      = 'bold 15px Courier New';
-  ctx.fillText('NASCAR-STYLE OVAL', W / 2, 248);
+  ctx.fillText('NASCAR SUPERSPEEDWAY', W / 2, 248);
 
   ctx.fillStyle = '#fff';
   ctx.font      = '20px Courier New';
@@ -585,16 +525,10 @@ function drawStartScreen() {
   ctx.font      = '14px Courier New';
   ctx.fillText('Arrow keys / WASD to drive   |   P to pause', W / 2, 348);
 
-  var lc = ['#ff8c00', '#a855f7', '#22d3ee'];
-  var ll = ['Orange opponent  (slow)', 'Purple opponent  (medium)', 'Cyan opponent    (fast)'];
-  for (var i = 0; i < 3; i++) {
-    ctx.fillStyle = lc[i];
-    ctx.fillRect(W / 2 - 90, 400 + i * 24, 14, 9);
-    ctx.fillStyle  = '#ddd';
-    ctx.font       = '13px Courier New';
-    ctx.textAlign  = 'left';
-    ctx.fillText(ll[i], W / 2 - 72, 409 + i * 24);
-  }
+  ctx.fillStyle = '#ffee77';
+  ctx.font      = '13px Courier New';
+  ctx.fillText('Hit ramp boosts for extra speed!', W / 2, 385);
+
   ctx.restore();
 }
 
@@ -625,8 +559,17 @@ function loop(timestamp) {
   lastTime = timestamp;
 
   if (gameState === STATE_PLAYING) {
+    // Save position before update for wall collision revert
+    var prevX = player.x, prevY = player.y;
     player.update(dt, keys, track);
-    ghosts.forEach(function(g) { g.update(dt); });
+
+    // Wall collision — if car drives onto grass, revert and bounce
+    if (track.getCell(player.x, player.y) === 0) {
+      player.x = prevX;
+      player.y = prevY;
+      player.speed *= -0.2;
+    }
+
     lap.update(player, timestamp);
     updateCamera();
 
@@ -642,10 +585,11 @@ function loop(timestamp) {
 
     drawBackground();
     drawRoad();
+    drawWalls();
     drawObstacles();
-    drawOpponents();
     drawCarHood();
     lap.drawHUD(ctx);
+    lap.drawLeaderboard(ctx);
     lap.drawWrongWay(ctx);
     var effSpd = player.offTrack ? Math.abs(player.speed) * OFFTRACK_MULT : Math.abs(player.speed);
     drawSpeedometer(effSpd);
@@ -657,10 +601,11 @@ function loop(timestamp) {
     updateCamera();
     drawBackground();
     drawRoad();
+    drawWalls();
     drawObstacles();
-    drawOpponents();
     drawCarHood();
     lap.drawHUD(ctx);
+    lap.drawLeaderboard(ctx);
     var pauseSpd = player.offTrack ? Math.abs(player.speed) * OFFTRACK_MULT : Math.abs(player.speed);
     drawSpeedometer(pauseSpd);
     drawPauseScreen();

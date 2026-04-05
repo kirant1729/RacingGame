@@ -1,10 +1,8 @@
 // lap.js — Lap timing, finish-line detection, and HUD overlay
 
-// Finish line: a vertical stripe across the track at the bottom of the oval (x=400)
-// Oval: cx=400, cy=300, outerRy=220, innerRy=130
-// At x=400: outer edge y=520, inner edge y=430, center y=475
-var FINISH_X      = 500;   // x position of the vertical finish line (Monza main straight)
-var FINISH_Y      = 1200;  // center y of the track at the finish line
+// Finish line: x=700 on the front straight (y=1000) of the big oval.
+var FINISH_X      = 700;   // x position of the vertical finish line
+var FINISH_Y      = 1000;  // center y of the track at the finish line
 var FINISH_HALF_H = 80;    // half-height of the detection zone
 var MIN_LAP_TIME  = 3000; // ms — minimum time between crossings (prevents double-count)
 
@@ -19,9 +17,9 @@ function Lap() {
   this.lastWrongWayTime = 0;
   this.lastX = null;           // kept for wrong-way detection only
   // armed: true once the car has been west of the finish zone, enabling the next
-  // east crossing to count as a lap. Fixes the bug where player starts east of
-  // the finish line and lastX never drops below FINISH_X on the first lap.
+  // east crossing to count as a lap.
   this.armed = false;
+  this.lapTimes = [];          // completed lap times in ms (chronological order)
 }
 
 // Call every frame (pass car object and current timestamp)
@@ -44,6 +42,8 @@ Lap.prototype.update = function(car, now) {
 
   if (crossed) {
     if (this.lapCount > 0) {
+      // Record the completed lap time
+      this.lapTimes.push(this.currentLapMs);
       if (this.currentLapMs < this.bestLapMs) {
         this.bestLapMs = this.currentLapMs;
         this.bestLapFlashTimer = 2500;
@@ -89,7 +89,7 @@ Lap.prototype.drawWrongWay = function(ctx) {
 Lap.prototype.drawFinishLine = function(ctx) {
   var squareSize = 10;
   var stripeWidth = 8;
-  var rows = Math.floor((FINISH_HALF_H * 2) / squareSize);  // 9 squares tall
+  var rows = Math.floor((FINISH_HALF_H * 2) / squareSize);
   var startX = FINISH_X - stripeWidth / 2;
   var startY = FINISH_Y - FINISH_HALF_H;
 
@@ -154,5 +154,29 @@ Lap.prototype.drawHUD = function(ctx) {
     ctx.globalAlpha = 1;
   }
 
+  ctx.restore();
+};
+
+// Draw the lap-time leaderboard (top-right, below HUD bar)
+Lap.prototype.drawLeaderboard = function(ctx) {
+  if (this.lapTimes.length === 0) return;
+  var sorted = this.lapTimes.slice().sort(function(a, b) { return a - b; });
+  var show   = sorted.slice(0, 5);
+  var x = 784, y = 58, lineH = 20;
+
+  ctx.save();
+  ctx.fillStyle    = 'rgba(0, 0, 0, 0.55)';
+  ctx.fillRect(x - 148, y - 4, 152, 18 + show.length * lineH);
+
+  ctx.font         = 'bold 11px Courier New';
+  ctx.textAlign    = 'right';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle    = '#fff';
+  ctx.fillText('BEST LAPS', x, y);
+
+  for (var i = 0; i < show.length; i++) {
+    ctx.fillStyle = (i === 0) ? '#ffd700' : '#ccc';
+    ctx.fillText((i + 1) + '.  ' + formatTime(show[i]), x, y + 16 + i * lineH);
+  }
   ctx.restore();
 };
