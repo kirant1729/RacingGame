@@ -1,9 +1,9 @@
 // lap.js — Lap timing, finish-line detection, and HUD overlay
 
 // Finish line: x=700 on the front straight (y=1000) of the big oval.
-var FINISH_X      = 700;   // x position of the vertical finish line
-var FINISH_Y      = 1000;  // center y of the track at the finish line
-var FINISH_HALF_H = 80;    // half-height of the detection zone
+var FINISH_X      = 1200;  // x position of the vertical finish line
+var FINISH_Y      = 1200;  // center y of the track at the finish line
+var FINISH_HALF_H = 200;   // half-height of the detection zone (covers full track width)
 var MIN_LAP_TIME  = 3000; // ms — minimum time between crossings (prevents double-count)
 
 function Lap() {

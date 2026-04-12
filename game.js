@@ -27,7 +27,7 @@ var carTilt           = 0;    // radians — current lean angle when cornering
 
 // --- Game objects ---
 var track  = new Track(TRACK_CONFIG);
-var player = new Car(800, 1000, 0, '#e94560');
+var player = new Car(1500, 1200, 0, '#e94560');
 var lap    = new Lap();
 
 // --- Camera ---
@@ -123,9 +123,9 @@ var roadImg = ctx.createImageData(W, H - HORIZON);
 // Speed-boost ramps
 // ─────────────────────────────────────────────
 var OBSTACLES = [
-  {x:2870,y:1300,r:12},{x:3080,y:1500,r:12},{x:2870,y:1700,r:12},
-  {x:1800,y:2000,r:12},{x:1400,y:2000,r:12},
-  {x: 330,y:1700,r:12},{x: 120,y:1500,r:12},{x: 330,y:1300,r:12},
+  // Speed-boost ramps on the main straight and back section
+  {x:2000,y:1200,r:12},{x:2900,y:1200,r:12},
+  {x:2700,y:3500,r:12},{x:2200,y:3300,r:12},
 ];
 
 // ─────────────────────────────────────────────
