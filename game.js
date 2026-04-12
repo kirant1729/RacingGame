@@ -28,34 +28,6 @@ var carTilt           = 0;    // radians — current lean angle when cornering
 // --- Game objects ---
 var track  = new Track(TRACK_CONFIG);
 var player = new Car(1500, 1200, 0, '#e94560');
-
-// --- Track segments (centerline samples every ~100 units for road marking) ---
-var TRACK_SEGMENTS = (function () {
-  var segs = [], wps = TRACK_WAYPOINTS, n = wps.length;
-  for (var i = 0; i < n; i++) {
-    var a = wps[i], b = wps[(i + 1) % n];
-    var dx = b.x - a.x, dy = b.y - a.y;
-    var len = Math.sqrt(dx * dx + dy * dy);
-    var ang = Math.atan2(dy, dx);
-    var steps = Math.max(1, Math.floor(len / 80));
-    for (var s = 0; s < steps; s++) {
-      var t = s / steps;
-      segs.push({ x: a.x + dx * t, y: a.y + dy * t, angle: ang });
-    }
-  }
-  return segs;
-}());
-
-function findNearestSeg(wx, wy) {
-  var best = TRACK_SEGMENTS[0], bestD2 = Infinity;
-  for (var i = 0; i < TRACK_SEGMENTS.length; i++) {
-    var s = TRACK_SEGMENTS[i];
-    var dx = wx - s.x, dy = wy - s.y;
-    var d2 = dx * dx + dy * dy;
-    if (d2 < bestD2) { bestD2 = d2; best = s; }
-  }
-  return best;
-}
 var lap    = new Lap();
 
 // --- Camera ---
@@ -148,23 +120,6 @@ var CITY = (function () {
 var roadImg = ctx.createImageData(W, H - HORIZON);
 
 // ─────────────────────────────────────────────
-// Grandstands — world positions around the F1 circuit
-// w = world width, h = world height (how tall they appear)
-// ─────────────────────────────────────────────
-var GRANDSTANDS = [
-  // Main straight — north side (y≈850, faces south toward track at y=1200)
-  {x:1600, y:840, w:560, h:290},
-  {x:2350, y:840, w:600, h:290},
-  {x:3150, y:840, w:560, h:290},
-  // T1 sweeper outside — east wall (faces west)
-  {x:4760, y:1600, w:440, h:250},
-  {x:4760, y:2100, w:440, h:250},
-  // Hairpin outside — far east
-  {x:4820, y:3050, w:400, h:230},
-  {x:4820, y:3450, w:400, h:230},
-];
-
-// ─────────────────────────────────────────────
 // Speed-boost ramps
 // ─────────────────────────────────────────────
 var OBSTACLES = [
@@ -209,81 +164,32 @@ function drawBackground() {
 }
 
 // ─────────────────────────────────────────────
-// Mode 7 scanline road — enhanced with proper markings
+// Mode 7 scanline road
 // ─────────────────────────────────────────────
 function drawRoad() {
-  var px = roadImg.data;
-  var cosA = Math.cos(cam.angle), sinA = Math.sin(cam.angle);
-  var ROAD_R = TRACK_HALF_W - 20;  // 160 — asphalt radius
-  var EDGE_W = 18;                  // white edge line width in world units
-  var DASH_W = 10;                  // centre dash half-width
-
-  for (var row = 0; row < H - HORIZON; row += 2) {
-    var rowFH = row + 1;
-    var depth = CAM_HEIGHT * FOCAL_LEN / rowFH;
-    var dof   = depth / FOCAL_LEN;
-    var band  = (Math.floor(depth / 80) & 1);
-
-    // Left-edge world coords and per-pixel step
-    var wxL = cam.x + cosA * depth + sinA * (W / 2) * dof;
-    var wyL = cam.y + sinA * depth - cosA * (W / 2) * dof;
-    var wxS = -sinA * dof, wyS = cosA * dof;
-
-    // Nearest track segment at row centre (used for lateral distance)
-    var wcx = cam.x + cosA * depth;
-    var wcy = cam.y + sinA * depth;
-    var seg  = findNearestSeg(wcx, wcy);
-    var sCos = Math.cos(seg.angle), sSin = Math.sin(seg.angle);
-
-    var wx = wxL, wy = wyL;
-    for (var col = 0; col < W; col += 2) {
-      var r, g, b;
-      var gx = wx / GRID_CELL | 0, gy = wy / GRID_CELL | 0;
-      var cell = (gx >= 0 && gx < GRID_W && gy >= 0 && gy < GRID_H) ? GRID[gy * GRID_W + gx] : 0;
-
-      if (cell >= 2) {
-        if (cell === 3) {
-          // Finish line — checkered
-          var fc = (((wx / 10 | 0) + (wy / 10 | 0)) & 1);
-          r = fc ? 255 : 0; g = fc ? 255 : 0; b = fc ? 255 : 0;
-        } else {
-          // Lateral distance from track centreline
-          var ldx = wx - seg.x, ldy = wy - seg.y;
-          var latDist = Math.abs(-ldx * sSin + ldy * sCos);
-
-          if (latDist > ROAD_R - EDGE_W) {
-            // White edge line
-            r = 230; g = 230; b = 230;
-          } else if (latDist < DASH_W && band) {
-            // Centre dashes (depth-banded so they recede naturally)
-            r = 210; g = 210; b = 210;
-          } else {
-            // Normal asphalt — two-tone depth bands
-            if (band) { r = 82;  g = 82;  b = 88; }
-            else       { r = 66;  g = 66;  b = 72; }
-          }
-        }
-      } else if (cell === 1) {
-        // Curb — bold red/white depth bands
-        if (band) { r = 210; g = 18;  b = 18;  }
-        else       { r = 235; g = 235; b = 235; }
-      } else {
-        // Grass — smooth depth-banded stripes
-        if (band) { r = 42; g = 90;  b = 40; }
-        else       { r = 54; g = 112; b = 50; }
-      }
-
-      var i00 = (row * W + col) * 4;
-      var i01 = i00 + 4, i10 = i00 + W * 4, i11 = i10 + 4;
-      px[i00] = px[i01] = px[i10] = px[i11] = r;
-      px[i00+1] = px[i01+1] = px[i10+1] = px[i11+1] = g;
-      px[i00+2] = px[i01+2] = px[i10+2] = px[i11+2] = b;
-      px[i00+3] = px[i01+3] = px[i10+3] = px[i11+3] = 255;
-
-      wx += wxS * 2; wy += wyS * 2;
+  var px=roadImg.data, cosA=Math.cos(cam.angle), sinA=Math.sin(cam.angle);
+  for (var row=0;row<H-HORIZON;row+=2) {
+    var rowFH=row+1, depth=CAM_HEIGHT*FOCAL_LEN/rowFH, dof=depth/FOCAL_LEN;
+    var wxL=cam.x+cosA*depth+sinA*(W/2)*dof, wyL=cam.y+sinA*depth-cosA*(W/2)*dof;
+    var wxS=-sinA*dof, wyS=cosA*dof, band=(Math.floor(depth/60)&1);
+    var wx=wxL,wy=wyL;
+    for (var col=0;col<W;col+=2) {
+      var r,g,b;
+      var gx=wx/GRID_CELL|0, gy=wy/GRID_CELL|0;
+      var cell=(gx>=0&&gx<GRID_W&&gy>=0&&gy<GRID_H)?GRID[gy*GRID_W+gx]:0;
+      if(cell===3){var fc=(((wx/10|0)+(wy/10|0))&1);if(fc){r=255;g=255;b=255;}else{r=0;g=0;b=0;}}
+      else if(cell===2){if(band){r=82;g=82;b=88;}else{r=66;g=66;b=72;}}
+      else if(cell===1){var cb=((Math.floor(wx/12)^Math.floor(wy/12))&1);if(cb){r=210;g=18;b=18;}else{r=235;g=235;b=235;}}
+      else{var chk=((Math.floor(wx/50)^Math.floor(wy/50))&1);if(chk){r=42;g=88;b=40;}else{r=54;g=108;b=50;}}
+      var i00=(row*W+col)*4,i01=i00+4,i10=i00+W*4,i11=i10+4;
+      px[i00]=px[i01]=px[i10]=px[i11]=r;
+      px[i00+1]=px[i01+1]=px[i10+1]=px[i11+1]=g;
+      px[i00+2]=px[i01+2]=px[i10+2]=px[i11+2]=b;
+      px[i00+3]=px[i01+3]=px[i10+3]=px[i11+3]=255;
+      wx+=wxS*2; wy+=wyS*2;
     }
   }
-  ctx.putImageData(roadImg, 0, HORIZON);
+  ctx.putImageData(roadImg,0,HORIZON);
 }
 
 // ─────────────────────────────────────────────
@@ -667,87 +573,11 @@ function drawSpeedometer(speed) {
 }
 
 // ─────────────────────────────────────────────
-// Grandstands — projected billboard sprites
-// ─────────────────────────────────────────────
-function drawGrandstands() {
-  var cosA = Math.cos(cam.angle), sinA = Math.sin(cam.angle);
-  for (var i = 0; i < GRANDSTANDS.length; i++) {
-    var gs = GRANDSTANDS[i];
-    var dx = gs.x - cam.x, dy = gs.y - cam.y;
-    var fwd = dx * cosA + dy * sinA;
-    if (fwd < 30) continue;
-    var lat = -dx * sinA + dy * cosA;
-    var sx  = W / 2 + lat * FOCAL_LEN / fwd;
-    var sc  = FOCAL_LEN / fwd;
-    var sy  = HORIZON + CAM_HEIGHT * FOCAL_LEN / fwd;  // ground level
-    var sw  = gs.w * sc;
-    var sh  = gs.h * sc;
-    var x0  = sx - sw / 2, y0 = sy - sh;
-    if (x0 > W + 10 || x0 + sw < -10 || sy < HORIZON) continue;
-
-    // ── Concrete base (bottom 28%) ──────────────────────────────────────────
-    var baseH = sh * 0.28;
-    ctx.fillStyle = '#5a5a62';
-    ctx.fillRect(x0, sy - baseH, sw, baseH);
-
-    // ── Seating tiers (6 rows above base) ───────────────────────────────────
-    var tierColors = ['#c0392b','#2471a3','#1e8449','#d35400','#7d3c98','#b03a2e'];
-    var tierCount  = 6;
-    var seatAreaH  = sh - baseH;
-    var tierH      = seatAreaH / tierCount;
-    for (var t = 0; t < tierCount; t++) {
-      var ty = y0 + t * tierH;
-      // Step riser (concrete grey)
-      ctx.fillStyle = '#6e6e78';
-      ctx.fillRect(x0, ty, sw, tierH * 0.28);
-      // Seat row fill
-      ctx.fillStyle = tierColors[t % tierColors.length];
-      ctx.fillRect(x0, ty + tierH * 0.28, sw, tierH * 0.72);
-      // Alternating crowd highlights (seated fans)
-      ctx.fillStyle = 'rgba(255,255,255,0.13)';
-      var dotW = Math.max(3, sw / 26);
-      var dotH = Math.max(2, tierH * 0.45);
-      for (var ci = 0; ci < 26; ci++) {
-        if ((ci + t) % 2 === 0) {
-          ctx.fillRect(x0 + ci * (sw / 26), ty + tierH * 0.33, dotW, dotH);
-        }
-      }
-    }
-
-    // ── Vertical support pillars ─────────────────────────────────────────────
-    ctx.fillStyle = '#3a3a44';
-    var pillarCount = Math.max(2, Math.ceil(sw / 55));
-    var pilW = Math.max(3, sc * 7);
-    for (var p = 0; p < pillarCount; p++) {
-      var px2 = x0 + (p / (pillarCount - 1)) * sw;
-      ctx.fillRect(px2 - pilW / 2, y0, pilW, sh);
-    }
-
-    // ── Roof canopy ──────────────────────────────────────────────────────────
-    var roofW = sw * 1.10, roofH = Math.max(5, sh * 0.10);
-    var roofX = sx - roofW / 2;
-    ctx.fillStyle = '#28282e';
-    ctx.fillRect(roofX, y0 - roofH, roofW, roofH);
-    // Canopy soffit (underside lighter)
-    ctx.fillStyle = '#3e3e48';
-    ctx.fillRect(roofX, y0 - roofH * 0.30, roofW, roofH * 0.30);
-    // Neon edge strip on roof front
-    ctx.fillStyle = '#00ffcc';
-    ctx.fillRect(roofX, y0 - roofH, roofW, Math.max(2, roofH * 0.16));
-
-    // ── Neon accent strip above base ─────────────────────────────────────────
-    ctx.fillStyle = '#ff00ff';
-    ctx.fillRect(x0, sy - baseH - Math.max(2, sh * 0.022), sw, Math.max(2, sh * 0.022));
-  }
-}
-
-// ─────────────────────────────────────────────
 // Shared scene render helper
 // ─────────────────────────────────────────────
 function drawScene() {
   drawBackground();
   drawRoad();
-  drawGrandstands();
   drawWalls();
   drawObstacles();
   drawPlayerCar3D();
