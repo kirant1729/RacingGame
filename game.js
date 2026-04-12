@@ -23,6 +23,7 @@ var RACE_LAPS         = 4;
 var raceOverDismissed = false;
 var wallHitTimer      = 0;    // ms — how long brake lights flash after wall hit
 var wallBeepCooldown  = 0;    // ms — prevents beep firing every frame during collision
+var carTilt           = 0;    // radians — current lean angle when cornering
 
 // --- Game objects ---
 var track  = new Track(TRACK_CONFIG);
@@ -271,6 +272,12 @@ function drawPlayerCar3D() {
   var ch  = Math.max(10, 34 * sc);
   var by  = sy - ch * 0.5 + bob;   // lift car so full body sits above road surface
   var col = player.color;
+
+  // Apply cornering tilt around car centre
+  ctx.save();
+  ctx.translate(bx, by - ch * 0.5);
+  ctx.rotate(carTilt);
+  ctx.translate(-bx, -(by - ch * 0.5));
 
   // ── HOVER GLOW under car (ambient levitation light) ─────────────────────
   var hg = ctx.createRadialGradient(bx, by, 0, bx, by + ch*0.15, cw * 0.72);
@@ -536,6 +543,8 @@ function drawPlayerCar3D() {
     ctx.beginPath(); ctx.ellipse(rx, ly, cw*0.022, ch*0.028, 0, 0, Math.PI*2); ctx.fill();
   }
 
+  ctx.restore(); // end cornering tilt
+
   // ── GROUND SHADOW ────────────────────────────────────────────────────────
   ctx.save();
   ctx.globalAlpha = 0.22;
@@ -696,6 +705,9 @@ function loop(timestamp) {
       gameState = STATE_RACE_OVER;
     }
     updateCamera();
+
+    var targetTilt = keys.left ? -0.18 : keys.right ? 0.18 : 0;
+    carTilt += (targetTilt - carTilt) * Math.min(1, dt * 7);
 
     var isTurning = keys.left || keys.right;
     for (var oi=0;oi<OBSTACLES.length;oi++) {
