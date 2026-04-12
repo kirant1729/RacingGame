@@ -506,10 +506,14 @@ function drawPlayerCar3D() {
   ctx.stroke();
 
   // ── BRAKE / CRASH LIGHTS ────────────────────────────────────────────────
-  var flashOn    = Math.floor(Date.now() / 90) % 2 === 0;
-  var lightOn    = keys.down || (wallHitTimer > 0 && flashOn);
+  var flashOn = Math.floor(Date.now() / 90) % 2 === 0;
+  var lightOn = !keys.up || (wallHitTimer > 0 && flashOn);
+  var lx = bx - cw * 0.30, rx = bx + cw * 0.30, ly = by - ch * 0.11;
+  // Always-visible dim lens (light off state)
+  ctx.fillStyle = '#550000';
+  ctx.beginPath(); ctx.ellipse(lx, ly, cw*0.055, ch*0.065, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(rx, ly, cw*0.055, ch*0.065, 0, 0, Math.PI*2); ctx.fill();
   if (lightOn) {
-    var lx = bx - cw * 0.30, rx = bx + cw * 0.30, ly = by - ch * 0.11;
     // Glow halos
     ctx.save();
     ctx.globalAlpha = 0.45;
@@ -522,7 +526,7 @@ function drawPlayerCar3D() {
     ctx.fillStyle = rglow;
     ctx.beginPath(); ctx.ellipse(rx, ly, cw*0.13, ch*0.15, 0, 0, Math.PI*2); ctx.fill();
     ctx.restore();
-    // Solid light lens
+    // Bright lit lens
     ctx.fillStyle = '#ff1010';
     ctx.beginPath(); ctx.ellipse(lx, ly, cw*0.055, ch*0.065, 0, 0, Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.ellipse(rx, ly, cw*0.055, ch*0.065, 0, 0, Math.PI*2); ctx.fill();
