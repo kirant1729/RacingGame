@@ -19,8 +19,10 @@ var STATE_PAUSED    = 'paused';
 var STATE_RACE_OVER = 'raceover';
 var gameState       = STATE_START;
 var countdownStart  = 0;
-var RACE_LAPS       = 4;
+var RACE_LAPS         = 4;
 var raceOverDismissed = false;
+var wallHitTimer      = 0;    // ms — how long brake lights flash after wall hit
+var wallBeepCooldown  = 0;    // ms — prevents beep firing every frame during collision
 
 // --- Game objects ---
 var track  = new Track(TRACK_CONFIG);
@@ -503,6 +505,33 @@ function drawPlayerCar3D() {
   ctx.ellipse(bx, by - ch*0.03, cw*0.10, ch*0.06, 0, 0, Math.PI*2);
   ctx.stroke();
 
+  // ── BRAKE / CRASH LIGHTS ────────────────────────────────────────────────
+  var flashOn    = Math.floor(Date.now() / 90) % 2 === 0;
+  var lightOn    = keys.down || (wallHitTimer > 0 && flashOn);
+  if (lightOn) {
+    var lx = bx - cw * 0.30, rx = bx + cw * 0.30, ly = by - ch * 0.11;
+    // Glow halos
+    ctx.save();
+    ctx.globalAlpha = 0.45;
+    var lglow = ctx.createRadialGradient(lx, ly, 0, lx, ly, cw * 0.13);
+    lglow.addColorStop(0, '#ff2020'); lglow.addColorStop(1, 'rgba(255,0,0,0)');
+    ctx.fillStyle = lglow;
+    ctx.beginPath(); ctx.ellipse(lx, ly, cw*0.13, ch*0.15, 0, 0, Math.PI*2); ctx.fill();
+    var rglow = ctx.createRadialGradient(rx, ly, 0, rx, ly, cw * 0.13);
+    rglow.addColorStop(0, '#ff2020'); rglow.addColorStop(1, 'rgba(255,0,0,0)');
+    ctx.fillStyle = rglow;
+    ctx.beginPath(); ctx.ellipse(rx, ly, cw*0.13, ch*0.15, 0, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+    // Solid light lens
+    ctx.fillStyle = '#ff1010';
+    ctx.beginPath(); ctx.ellipse(lx, ly, cw*0.055, ch*0.065, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(rx, ly, cw*0.055, ch*0.065, 0, 0, Math.PI*2); ctx.fill();
+    // Bright centre spot
+    ctx.fillStyle = '#ffaaaa';
+    ctx.beginPath(); ctx.ellipse(lx, ly, cw*0.022, ch*0.028, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(rx, ly, cw*0.022, ch*0.028, 0, 0, Math.PI*2); ctx.fill();
+  }
+
   // ── GROUND SHADOW ────────────────────────────────────────────────────────
   ctx.save();
   ctx.globalAlpha = 0.22;
@@ -653,7 +682,11 @@ function loop(timestamp) {
     player.update(dt, keys, track);
     if (track.getCell(player.x, player.y) === 0) {
       player.x=prevX; player.y=prevY; player.speed*=-0.2;
+      wallHitTimer = 700;
+      if (wallBeepCooldown <= 0) { SoundSystem.crash(); wallBeepCooldown = 900; }
     }
+    if (wallHitTimer    > 0) wallHitTimer    -= dt * 1000;
+    if (wallBeepCooldown > 0) wallBeepCooldown -= dt * 1000;
     lap.update(player, timestamp);
     if (!raceOverDismissed && lap.lapTimes.length >= RACE_LAPS) {
       gameState = STATE_RACE_OVER;
