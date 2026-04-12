@@ -97,5 +97,22 @@ var SoundSystem = (function () {
     osc.stop(t + 0.35);
   }
 
-  return { init: init, update: update, boost: boost };
+  // ── Wall-crash beep (short descending klaxon) ────────────────────────────
+  function crash() {
+    if (!actx) return;
+    var osc  = actx.createOscillator();
+    var gain = actx.createGain();
+    osc.connect(gain);
+    gain.connect(actx.destination);
+    osc.type = 'square';
+    var t = actx.currentTime;
+    osc.frequency.setValueAtTime(520, t);
+    osc.frequency.linearRampToValueAtTime(180, t + 0.18);
+    gain.gain.setValueAtTime(0.30, t);
+    gain.gain.linearRampToValueAtTime(0, t + 0.22);
+    osc.start(t);
+    osc.stop(t + 0.22);
+  }
+
+  return { init: init, update: update, boost: boost, crash: crash };
 }());

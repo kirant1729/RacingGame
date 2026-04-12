@@ -1,54 +1,59 @@
 // track.js — Track geometry, bitmap grid, and collision detection
 
-var TRACK_HALF_W = 140;  // half-width of track in world units (track is 280 wide)
+var TRACK_HALF_W = 180;  // half-width of track in world units (track is 360 wide)
 
-// NASCAR-style oval — bigger and longer than before.
-// Front straight: east (increasing x) at y=1000, x: 600→2600.
-// Back  straight: west (decreasing x) at y=2000, x: 600→2600.
-// Right semicircle: center (2600, 1500), radius 500.
-// Left  semicircle: center  (600, 1500), radius 500.
-// Finish line: x=700, y=1000 (crossed left-to-right = clockwise lap).
+// Custom F1-style circuit — winding, non-oval, with chicanes, hairpin, and S-curves.
+// World: 6000 × 5000 units.
+// Main straight: heading east at y=1200, x: 800→3700.
+// Finish line: x=1200, y=1200 (crossed west-to-east = clockwise lap).
 var TRACK_WAYPOINTS = [
-  // Front straight (heading east, y=1000)
-  {x:  600, y: 1000},  //  0  Turn 4 exit / start
-  {x:  700, y: 1000},  //  1  FINISH LINE
-  {x: 1000, y: 1000},  //  2
-  {x: 1400, y: 1000},  //  3
-  {x: 1800, y: 1000},  //  4
-  {x: 2200, y: 1000},  //  5
-  {x: 2600, y: 1000},  //  6  front straight end / T1 entry
-  // Right semicircle (Turn 1 / Turn 2) — center (2600, 1500), r=500
-  {x: 2954, y: 1146},  //  7  angle = −π/4
-  {x: 3100, y: 1500},  //  8  apex (angle = 0)
-  {x: 2954, y: 1854},  //  9  angle = +π/4
-  {x: 2600, y: 2000},  // 10  T2 exit (angle = +π/2)
-  // Back straight (heading west, y=2000)
-  {x: 2200, y: 2000},  // 11
-  {x: 1800, y: 2000},  // 12
-  {x: 1400, y: 2000},  // 13
-  {x: 1000, y: 2000},  // 14
-  {x:  600, y: 2000},  // 15  back straight end / T3 entry
-  // Left semicircle (Turn 3 / Turn 4) — center (600, 1500), r=500
-  {x:  246, y: 1854},  // 16  angle = +3π/4
-  {x:  100, y: 1500},  // 17  apex (angle = π)
-  {x:  246, y: 1146},  // 18  angle = +5π/4
-  // closes back to WP 0 (600, 1000)
+  // ── S/F area — long main straight heading east ──────────────────────────
+  {x:  800, y: 1200},  //  0  final corner exit / before S/F
+  {x: 1200, y: 1200},  //  1  FINISH LINE
+  {x: 2000, y: 1200},  //  2
+  {x: 2900, y: 1200},  //  3
+  {x: 3700, y: 1200},  //  4  end of main straight
+  // ── T1-T2: wide right sweeper turning south ──────────────────────────────
+  {x: 4200, y: 1500},  //  5  T1 — sweeping right
+  {x: 4500, y: 2000},  //  6  T1 exit — heading south
+  // ── T3-T4: left-right chicane ────────────────────────────────────────────
+  {x: 4200, y: 2300},  //  7  T3 — left flick
+  {x: 4500, y: 2600},  //  8  T4 — right exit
+  // ── T5: right-hand hairpin (south → west) ────────────────────────────────
+  {x: 4500, y: 3000},  //  9  hairpin entry heading south
+  {x: 4400, y: 3300},  // 10  hairpin apex
+  {x: 4100, y: 3500},  // 11  hairpin turning west
+  {x: 3600, y: 3500},  // 12  hairpin exit heading west
+  // ── Back section — squiggly S-curves heading west ────────────────────────
+  {x: 3200, y: 3300},  // 13  kink right
+  {x: 2700, y: 3500},  // 14  kink left
+  {x: 2200, y: 3300},  // 15  kink right
+  {x: 1700, y: 3500},  // 16  kink left
+  {x: 1300, y: 3300},  // 17  kink right — heading NW
+  // ── T6: sweeping right turn heading north ────────────────────────────────
+  {x: 1000, y: 2900},  // 18  T6 entry
+  {x:  900, y: 2500},  // 19  T6 — heading north
+  // ── T7-T8: S-curves ──────────────────────────────────────────────────────
+  {x: 1200, y: 2100},  // 20  T7 — right
+  {x:  800, y: 1700},  // 21  T8 — left
+  {x:  800, y: 1400},  // 22  final straight approach
+  // closes back to WP 0 (800, 1200)
 ];
 
 // ─── Bitmap grid ─────────────────────────────────────────────────────────────
-// World: 3600 × 3000 units.  Cell = 20 → grid 180 × 150 = 27 000 cells.
+// World: 6000 × 5000 units.  Cell = 20 → grid 300 × 250 = 75 000 cells.
 // Values: 0 = grass, 1 = curb, 2 = road, 3 = finish.
 var GRID_CELL = 20;
-var GRID_W    = 180;
-var GRID_H    = 150;
+var GRID_W    = 300;
+var GRID_H    = 250;
 var GRID      = new Uint8Array(GRID_W * GRID_H);
 
 (function buildGrid() {
   var wps   = TRACK_WAYPOINTS;
   var n     = wps.length;
   var step  = GRID_CELL / 2;          // walk centerline in 10-unit steps
-  var roadR = TRACK_HALF_W - 20;      // 120 — pure asphalt zone
-  var curbR = TRACK_HALF_W;           // 140 — outer edge (curb 20 u wide)
+  var roadR = TRACK_HALF_W - 20;      // 160 — pure asphalt zone
+  var curbR = TRACK_HALF_W;           // 180 — outer edge (curb 20 u wide)
 
   function markDisc(cx, cy) {
     var minGx = Math.max(0,          Math.floor((cx - curbR) / GRID_CELL));
@@ -82,11 +87,11 @@ var GRID      = new Uint8Array(GRID_W * GRID_H);
     }
   }
 
-  // Finish line strip — x ≈ 700, y = 1000 ± 80 → value 3
-  var fxMin = Math.max(0,          Math.floor(680 / GRID_CELL));
-  var fxMax = Math.min(GRID_W - 1, Math.floor(720 / GRID_CELL));
-  var fyMin = Math.max(0,          Math.floor(920 / GRID_CELL));
-  var fyMax = Math.min(GRID_H - 1, Math.floor(1080 / GRID_CELL));
+  // Finish line strip — x ≈ 1200, y = 1200 ± 200 → value 3
+  var fxMin = Math.max(0,          Math.floor(1180 / GRID_CELL));
+  var fxMax = Math.min(GRID_W - 1, Math.floor(1220 / GRID_CELL));
+  var fyMin = Math.max(0,          Math.floor(1000 / GRID_CELL));
+  var fyMax = Math.min(GRID_H - 1, Math.floor(1400 / GRID_CELL));
   for (var gy2 = fyMin; gy2 <= fyMax; gy2++) {
     for (var gx2 = fxMin; gx2 <= fxMax; gx2++) {
       if (GRID[gy2 * GRID_W + gx2] >= 2) GRID[gy2 * GRID_W + gx2] = 3;
@@ -95,7 +100,7 @@ var GRID      = new Uint8Array(GRID_W * GRID_H);
 }());
 
 // ─── Track API ───────────────────────────────────────────────────────────────
-var TRACK_CONFIG = { cx: 400, cy: 300, outerRx: 340, outerRy: 220, innerRx: 210, innerRy: 130 };
+var TRACK_CONFIG = { cx: 500, cy: 400, outerRx: 440, outerRy: 320, innerRx: 280, innerRy: 200 };
 
 function Track() {}
 

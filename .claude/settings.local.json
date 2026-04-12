@@ -37,7 +37,10 @@
       "Bash(powershell -NoProfile -Command \"netstat -ano | Select-String '':3000''\")",
       "Bash(where cmd:*)",
       "Bash(git push:*)",
-      "Bash(gh repo:*)"
+      "Bash(gh repo:*)",
+      "Bash(gh api:*)",
+      "Bash(gh pr:*)",
+      "Bash(git revert:*)"
     ]
   }
 }
