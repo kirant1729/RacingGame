@@ -206,8 +206,8 @@ function drawWalls() {
       var cell  = track.getCell(wx, wy);
       if (prevCell >= 1 && cell === 0) {
         var screenY  = Math.min(HORIZON + row, H);
-        var faceH    = Math.min(screenY - HORIZON, 40);   // capped — shorter wall
-        var wallH    = Math.max(12, CAM_HEIGHT * 2.0 * FOCAL_LEN / depth);
+        var faceH    = Math.min(screenY - HORIZON, 18);   // capped — shorter wall
+        var wallH    = Math.max(8, CAM_HEIGHT * 1.0 * FOCAL_LEN / depth);
         // Concrete wall face (short, thick block)
         ctx.fillStyle = '#6c6c78';
         ctx.fillRect(col, screenY - faceH, 4, faceH);
