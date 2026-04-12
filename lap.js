@@ -22,6 +22,20 @@ function Lap() {
   this.lapTimes = [];          // completed lap times in ms (chronological order)
 }
 
+Lap.prototype.reset = function() {
+  this.lapCount = 0;
+  this.lapStartTime = null;
+  this.currentLapMs = 0;
+  this.bestLapMs = Infinity;
+  this.bestLapFlashTimer = 0;
+  this.lastCrossTime = 0;
+  this.wrongWayTimer = 0;
+  this.lastWrongWayTime = 0;
+  this.lastX = null;
+  this.armed = false;
+  this.lapTimes = [];
+};
+
 // Call every frame (pass car object and current timestamp)
 Lap.prototype.update = function(car, now) {
   if (this.lapStartTime === null) {

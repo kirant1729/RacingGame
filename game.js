@@ -12,10 +12,15 @@ var FOCAL_LEN  = 250;
 var CAM_BEHIND = 150;   // world units behind the car
 
 // --- Game state ---
-var STATE_START   = 'start';
-var STATE_PLAYING = 'playing';
-var STATE_PAUSED  = 'paused';
-var gameState     = STATE_START;
+var STATE_START     = 'start';
+var STATE_COUNTDOWN = 'countdown';
+var STATE_PLAYING   = 'playing';
+var STATE_PAUSED    = 'paused';
+var STATE_RACE_OVER = 'raceover';
+var gameState       = STATE_START;
+var countdownStart  = 0;
+var RACE_LAPS       = 4;
+var raceOverDismissed = false;
 
 // --- Game objects ---
 var track  = new Track(TRACK_CONFIG);
@@ -42,10 +47,23 @@ document.addEventListener('keydown', function(e) {
     case 'ArrowRight': case 'd': case 'D': keys.right = true;  e.preventDefault(); break;
     case ' ':
       if (gameState === STATE_START) {
-        gameState = STATE_PLAYING;
+        gameState = STATE_COUNTDOWN;
+        countdownStart = performance.now();
         SoundSystem.init();
+      } else if (gameState === STATE_RACE_OVER) {
+        gameState = STATE_PLAYING;
+        raceOverDismissed = true;
       }
       e.preventDefault();
+      break;
+    case 'r': case 'R':
+      if (gameState === STATE_RACE_OVER) {
+        player.x = 800; player.y = 1000; player.angle = 0; player.speed = 0;
+        lap.reset();
+        raceOverDismissed = false;
+        gameState = STATE_COUNTDOWN;
+        countdownStart = performance.now();
+      }
       break;
     case 'p': case 'P':
       if (gameState === STATE_PLAYING)      gameState = STATE_PAUSED;
@@ -105,25 +123,6 @@ var OBSTACLES = [
   {x:2870,y:1300,r:12},{x:3080,y:1500,r:12},{x:2870,y:1700,r:12},
   {x:1800,y:2000,r:12},{x:1400,y:2000,r:12},
   {x: 330,y:1700,r:12},{x: 120,y:1500,r:12},{x: 330,y:1300,r:12},
-];
-
-// ─────────────────────────────────────────────
-// Grandstands — 3D stadium seating outside the oval
-// Front straight: y≈820 (north of track outer edge y=860)
-// Back  straight: y≈2180 (south of track outer edge y=2140)
-// ─────────────────────────────────────────────
-var GRANDSTANDS = [
-  // Front straight stands
-  {x:  850, y:  820, w: 240, tiers: 10, colorA: '#cc2233', colorB: '#eeeeee'},
-  {x: 1200, y:  820, w: 260, tiers: 12, colorA: '#2244cc', colorB: '#eeeeee'},
-  {x: 1600, y:  820, w: 280, tiers: 12, colorA: '#cc2233', colorB: '#2244cc'},
-  {x: 2000, y:  820, w: 260, tiers: 10, colorA: '#2244cc', colorB: '#eeeeee'},
-  {x: 2380, y:  820, w: 200, tiers:  8, colorA: '#22aa44', colorB: '#eeeeee'},
-  // Back straight stands
-  {x:  950, y: 2180, w: 240, tiers:  8, colorA: '#2244cc', colorB: '#eeeeee'},
-  {x: 1350, y: 2180, w: 270, tiers: 10, colorA: '#cc2233', colorB: '#eeeeee'},
-  {x: 1750, y: 2180, w: 270, tiers: 10, colorA: '#2244cc', colorB: '#cc2233'},
-  {x: 2150, y: 2180, w: 240, tiers:  8, colorA: '#22aa44', colorB: '#eeeeee'},
 ];
 
 // ─────────────────────────────────────────────
@@ -194,86 +193,32 @@ function drawRoad() {
 // Armco barrier walls
 // ─────────────────────────────────────────────
 function drawWalls() {
-  var cosA=Math.cos(cam.angle),sinA=Math.sin(cam.angle);
-  for (var col=0;col<W;col+=2) {
-    var prevCell=-1;
-    for (var row=0;row<H-HORIZON;row+=2) {
-      var rowFH=row+1, depth=CAM_HEIGHT*FOCAL_LEN/rowFH, dof=depth/FOCAL_LEN;
-      var lat=(col-W/2)*dof;
-      var wx=cam.x+cosA*depth-sinA*lat, wy=cam.y+sinA*depth+cosA*lat;
-      var cell=track.getCell(wx,wy);
-      if(prevCell>=1&&cell===0){
-        var screenY=HORIZON+row, wallH=Math.max(3,CAM_HEIGHT*0.65*FOCAL_LEN/depth);
-        var stripe=(Math.floor(depth/120)&1);
-        ctx.fillStyle=stripe?'#cc2222':'#eeeeee';
-        ctx.fillRect(col,screenY-wallH,2,wallH); break;
-      }
-      prevCell=cell;
-    }
-  }
-}
-
-// ─────────────────────────────────────────────
-// Grandstands (3D stadium seating sprites)
-// ─────────────────────────────────────────────
-function drawGrandstands() {
   var cosA = Math.cos(cam.angle), sinA = Math.sin(cam.angle);
-  var vis = [];
-  for (var i = 0; i < GRANDSTANDS.length; i++) {
-    var gs  = GRANDSTANDS[i];
-    var dx  = gs.x - cam.x, dy = gs.y - cam.y;
-    var fwd = dx * cosA + dy * sinA;
-    if (fwd < 40) continue;
-    var lat = -dx * sinA + dy * cosA;
-    var sx  = W / 2 + lat * FOCAL_LEN / fwd;
-    var sc  = FOCAL_LEN / fwd;
-    var gw  = gs.w * sc;
-    if (sx + gw < 0 || sx - gw > W) continue;
-    var sy  = HORIZON + CAM_HEIGHT * FOCAL_LEN / fwd;
-    vis.push({ gs: gs, sx: sx, sy: sy, sc: sc, fwd: fwd });
-  }
-  vis.sort(function(a, b) { return b.fwd - a.fwd; });
-
-  for (var j = 0; j < vis.length; j++) {
-    var v    = vis[j];
-    var bx   = v.sx, by = v.sy, sc = v.sc, gs = v.gs;
-    var gw   = gs.w * sc;
-    var th   = 20 * sc;           // height per tier
-    var totH = gs.tiers * th;
-
-    // ── Concrete back structure ───────────────────────────────────────────
-    ctx.fillStyle = '#5a5a5a';
-    ctx.fillRect(bx - gw/2, by - totH, gw, totH);
-
-    // ── Seat tiers ────────────────────────────────────────────────────────
-    for (var t = 0; t < gs.tiers; t++) {
-      var rowY = by - (t + 1) * th;
-      // Alternate two seat colors to show crowd variety
-      ctx.fillStyle = (t % 2 === 0) ? gs.colorA : gs.colorB;
-      ctx.fillRect(bx - gw/2 + sc, rowY + sc * 0.5, gw - 2*sc, th * 0.78);
-      // Thin step divider
-      ctx.fillStyle = '#333';
-      ctx.fillRect(bx - gw/2, rowY + th * 0.78 + sc * 0.5, gw, Math.max(1, th * 0.12));
+  for (var col = 0; col < W; col += 2) {
+    var prevCell = -1;
+    for (var row = 0; row < H - HORIZON + 200; row += 2) {
+      var rowFH = row + 1;
+      var depth = CAM_HEIGHT * FOCAL_LEN / rowFH;
+      var dof   = depth / FOCAL_LEN;
+      var lat   = (col - W / 2) * dof;
+      var wx    = cam.x + cosA * depth - sinA * lat;
+      var wy    = cam.y + sinA * depth + cosA * lat;
+      var cell  = track.getCell(wx, wy);
+      if (prevCell >= 1 && cell === 0) {
+        var screenY  = Math.min(HORIZON + row, H);
+        var faceH    = Math.min(screenY - HORIZON, 40);   // capped — shorter wall
+        var wallH    = Math.max(12, CAM_HEIGHT * 2.0 * FOCAL_LEN / depth);
+        // Concrete wall face (short, thick block)
+        ctx.fillStyle = '#6c6c78';
+        ctx.fillRect(col, screenY - faceH, 4, faceH);
+        // Blue/green alternating Armco stripe at base
+        var stripe = (Math.floor(depth / 120) & 1);
+        ctx.fillStyle = stripe ? '#0077dd' : '#22cc44';
+        ctx.fillRect(col, screenY - wallH, 4, wallH);
+        break;
+      }
+      prevCell = cell;
     }
-
-    // ── Support pillars ───────────────────────────────────────────────────
-    ctx.fillStyle = '#444';
-    ctx.fillRect(bx - gw/2 - 3*sc, by - totH, 3*sc, totH);
-    ctx.fillRect(bx + gw/2,         by - totH, 3*sc, totH);
-
-    // ── Roof canopy ───────────────────────────────────────────────────────
-    ctx.fillStyle = '#333';
-    ctx.fillRect(bx - gw/2 - 3*sc, by - totH - 7*sc, gw + 6*sc, 7*sc);
-
-    // ── Neon LED strip under roof edge ────────────────────────────────────
-    ctx.fillStyle = '#00ffff';
-    ctx.fillRect(bx - gw/2 - 3*sc, by - totH - 2*sc, gw + 6*sc, Math.max(1, 2*sc));
-
-    // ── Banner strip across middle of stand ───────────────────────────────
-    var midT = Math.floor(gs.tiers / 2);
-    var bannerY = by - midT * th;
-    ctx.fillStyle = gs.colorA;
-    ctx.fillRect(bx - gw/2 + sc, bannerY, gw - 2*sc, Math.max(2, th * 0.5));
   }
 }
 
@@ -320,9 +265,9 @@ function drawPlayerCar3D() {
   var bob     = Math.sin(now * 2.8) * 2.8 * sc;     // hover bob
 
   var bx  = sx;
-  var by  = sy + bob;
   var cw  = Math.max(20, 64 * sc);
   var ch  = Math.max(10, 34 * sc);
+  var by  = sy - ch * 0.5 + bob;   // lift car so full body sits above road surface
   var col = player.color;
 
   // ── HOVER GLOW under car (ambient levitation light) ─────────────────────
@@ -592,9 +537,32 @@ function drawScene() {
   drawBackground();
   drawRoad();
   drawWalls();
-  drawGrandstands();
   drawObstacles();
   drawPlayerCar3D();
+}
+
+// ─────────────────────────────────────────────
+// Countdown overlay (3-2-1-GO!)
+// ─────────────────────────────────────────────
+function drawCountdown(elapsed) {
+  var sec   = Math.floor(elapsed / 1000);   // 0, 1, 2 → number shown; 3 → GO!
+  var frac  = (elapsed % 1000) / 1000;      // 0→1 within each second
+  var label = sec < 3 ? String(3 - sec) : 'GO!';
+  var scale = 1 + 0.4 * (1 - frac);        // pulses large at beat, shrinks into next
+  var alpha = sec < 3 ? 1 : Math.max(0, 1 - frac * 3);
+
+  ctx.save();
+  ctx.globalAlpha  = alpha;
+  ctx.font         = 'bold ' + Math.round(96 * scale) + 'px Courier New';
+  ctx.textAlign    = 'center';
+  ctx.textBaseline = 'middle';
+  // Drop-shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillText(label, W / 2 + 4, H / 2 + 4);
+  // Main text — red for numbers, bright green for GO!
+  ctx.fillStyle = sec < 3 ? '#ff4444' : '#44ff88';
+  ctx.fillText(label, W / 2, H / 2);
+  ctx.restore();
 }
 
 // ─────────────────────────────────────────────
@@ -634,6 +602,44 @@ function drawPauseScreen() {
 }
 
 // ─────────────────────────────────────────────
+// Race-over screen
+// ─────────────────────────────────────────────
+function drawRaceOverScreen() {
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.75)';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 48px Courier New';
+  ctx.fillText('RACE COMPLETE', W / 2, 120);
+
+  ctx.font = 'bold 14px Courier New';
+  ctx.fillStyle = '#aaa';
+  ctx.fillText(RACE_LAPS + '-LAP RESULTS', W / 2, 158);
+
+  // Find best lap index
+  var bestIdx = 0;
+  for (var i = 1; i < lap.lapTimes.length; i++) {
+    if (lap.lapTimes[i] < lap.lapTimes[bestIdx]) bestIdx = i;
+  }
+  for (var i = 0; i < lap.lapTimes.length; i++) {
+    ctx.fillStyle = (i === bestIdx) ? '#ffd700' : '#ffffff';
+    ctx.font = (i === bestIdx) ? 'bold 20px Courier New' : '18px Courier New';
+    var label = (i === bestIdx) ? 'Lap ' + (i + 1) + ':  ' + formatTime(lap.lapTimes[i]) + '  ★ BEST' :
+                                  'Lap ' + (i + 1) + ':  ' + formatTime(lap.lapTimes[i]);
+    ctx.fillText(label, W / 2, 200 + i * 36);
+  }
+
+  ctx.font = '18px Courier New';
+  ctx.fillStyle = '#00ffff';
+  ctx.fillText('SPACE  — keep going', W / 2, 390);
+  ctx.fillStyle = '#ff8844';
+  ctx.fillText('R  — restart race', W / 2, 420);
+  ctx.restore();
+}
+
+// ─────────────────────────────────────────────
 // Main loop
 // ─────────────────────────────────────────────
 var lastTime = null;
@@ -649,6 +655,9 @@ function loop(timestamp) {
       player.x=prevX; player.y=prevY; player.speed*=-0.2;
     }
     lap.update(player, timestamp);
+    if (!raceOverDismissed && lap.lapTimes.length >= RACE_LAPS) {
+      gameState = STATE_RACE_OVER;
+    }
     updateCamera();
 
     var isTurning = keys.left || keys.right;
@@ -666,6 +675,17 @@ function loop(timestamp) {
     var effSpd=player.offTrack?Math.abs(player.speed)*OFFTRACK_MULT:Math.abs(player.speed);
     drawSpeedometer(effSpd);
 
+  } else if (gameState === STATE_COUNTDOWN) {
+    updateCamera();
+    drawScene();
+    lap.drawHUD(ctx);
+    var elapsed = timestamp - countdownStart;
+    if (elapsed >= 4000) {
+      gameState = STATE_PLAYING;   // GO! has fully faded — begin race
+    } else {
+      drawCountdown(elapsed);
+    }
+
   } else if (gameState === STATE_START) {
     drawStartScreen();
 
@@ -676,6 +696,14 @@ function loop(timestamp) {
     var pauseSpd=player.offTrack?Math.abs(player.speed)*OFFTRACK_MULT:Math.abs(player.speed);
     drawSpeedometer(pauseSpd);
     drawPauseScreen();
+
+  } else if (gameState === STATE_RACE_OVER) {
+    updateCamera();
+    drawScene();
+    lap.drawHUD(ctx); lap.drawLeaderboard(ctx);
+    var roSpd=player.offTrack?Math.abs(player.speed)*OFFTRACK_MULT:Math.abs(player.speed);
+    drawSpeedometer(roSpd);
+    drawRaceOverScreen();
   }
 
   requestAnimationFrame(loop);
