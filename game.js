@@ -213,7 +213,7 @@ function drawWalls() {
         ctx.fillRect(col, screenY - faceH, 4, faceH);
         // Blue/green alternating Armco stripe at base
         var stripe = (Math.floor(depth / 120) & 1);
-        ctx.fillStyle = stripe ? '#0077dd' : '#22cc44';
+        ctx.fillStyle = stripe ? '#cc2222' : '#eeeeee';
         ctx.fillRect(col, screenY - wallH, 4, wallH);
         break;
       }
