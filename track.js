@@ -1,6 +1,6 @@
 // track.js — Track geometry, bitmap grid, and collision detection
 
-var TRACK_HALF_W = 180;  // half-width of track in world units (track is 360 wide)
+var TRACK_HALF_W = 260;  // half-width of track in world units (track is 520 wide)
 
 // Custom F1-style circuit — winding, non-oval, with chicanes, hairpin, and S-curves.
 // World: 6000 × 5000 units.

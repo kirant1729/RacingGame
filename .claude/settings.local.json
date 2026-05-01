@@ -40,7 +40,8 @@
       "Bash(gh repo:*)",
       "Bash(gh api:*)",
       "Bash(gh pr:*)",
-      "Bash(git revert:*)"
+      "Bash(git revert:*)",
+      "Bash(gh run:*)"
     ]
   }
 }

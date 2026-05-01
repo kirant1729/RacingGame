@@ -30,6 +30,32 @@ var track  = new Track(TRACK_CONFIG);
 var player = new Car(1500, 1200, 0, '#e94560');
 var lap    = new Lap();
 
+// --- Track centreline segments (used for lateral distance / road markings) ---
+var TRACK_SEGMENTS = (function () {
+  var segs = [], wps = TRACK_WAYPOINTS, n = wps.length;
+  for (var i = 0; i < n; i++) {
+    var a = wps[i], b = wps[(i + 1) % n];
+    var dx = b.x - a.x, dy = b.y - a.y;
+    var len = Math.sqrt(dx * dx + dy * dy);
+    var ang = Math.atan2(dy, dx);
+    var steps = Math.max(1, Math.floor(len / 80));
+    for (var s = 0; s < steps; s++) {
+      segs.push({ x: a.x + dx * (s / steps), y: a.y + dy * (s / steps), angle: ang });
+    }
+  }
+  return segs;
+}());
+
+function findNearestSeg(wx, wy) {
+  var best = TRACK_SEGMENTS[0], bestD2 = Infinity;
+  for (var i = 0; i < TRACK_SEGMENTS.length; i++) {
+    var s = TRACK_SEGMENTS[i], dx = wx - s.x, dy = wy - s.y;
+    var d2 = dx * dx + dy * dy;
+    if (d2 < bestD2) { bestD2 = d2; best = s; }
+  }
+  return best;
+}
+
 // --- Camera ---
 var cam = { x: 0, y: 0, angle: 0 };
 
@@ -172,13 +198,23 @@ function drawRoad() {
     var rowFH=row+1, depth=CAM_HEIGHT*FOCAL_LEN/rowFH, dof=depth/FOCAL_LEN;
     var wxL=cam.x+cosA*depth+sinA*(W/2)*dof, wyL=cam.y+sinA*depth-cosA*(W/2)*dof;
     var wxS=-sinA*dof, wyS=cosA*dof, band=(Math.floor(depth/60)&1);
+    // Find nearest segment at row centre for dotted-line lateral distance
+    var wcx=cam.x+cosA*depth, wcy=cam.y+sinA*depth;
+    var seg=findNearestSeg(wcx, wcy);
+    var sCos=Math.cos(seg.angle), sSin=Math.sin(seg.angle);
+    // Along-track world position drives the dash — scrolls as the car moves
+    var dashBand=(Math.floor((wcx*sCos+wcy*sSin)/100)&1);
     var wx=wxL,wy=wyL;
     for (var col=0;col<W;col+=2) {
       var r,g,b;
       var gx=wx/GRID_CELL|0, gy=wy/GRID_CELL|0;
       var cell=(gx>=0&&gx<GRID_W&&gy>=0&&gy<GRID_H)?GRID[gy*GRID_W+gx]:0;
       if(cell===3){var fc=(((wx/10|0)+(wy/10|0))&1);if(fc){r=255;g=255;b=255;}else{r=0;g=0;b=0;}}
-      else if(cell===2){if(band){r=82;g=82;b=88;}else{r=66;g=66;b=72;}}
+      else if(cell===2){
+        var latD=Math.abs(-(wx-seg.x)*sSin+(wy-seg.y)*sCos);
+        if(latD<14&&dashBand){r=220;g=220;b=220;}
+        else if(band){r=82;g=82;b=88;}else{r=66;g=66;b=72;}
+      }
       else if(cell===1){var cb=((Math.floor(wx/12)^Math.floor(wy/12))&1);if(cb){r=210;g=18;b=18;}else{r=235;g=235;b=235;}}
       else{var chk=((Math.floor(wx/50)^Math.floor(wy/50))&1);if(chk){r=42;g=88;b=40;}else{r=54;g=108;b=50;}}
       var i00=(row*W+col)*4,i01=i00+4,i10=i00+W*4,i11=i10+4;
@@ -207,18 +243,15 @@ function drawWalls() {
       var wx    = cam.x + cosA * depth - sinA * lat;
       var wy    = cam.y + sinA * depth + cosA * lat;
       var cell  = track.getCell(wx, wy);
-      if (prevCell >= 1 && cell === 0) {
+      if ((prevCell >= 1 && cell === 0) || (prevCell === 0 && cell >= 1)) {
         var screenY  = Math.min(HORIZON + row, H);
-        var faceH    = Math.min(screenY - HORIZON, 18);   // capped — shorter wall
+        var faceH    = Math.min(screenY - HORIZON, 18);
         var wallH    = Math.max(8, CAM_HEIGHT * 1.0 * FOCAL_LEN / depth);
-        // Concrete wall face (short, thick block)
         ctx.fillStyle = '#6c6c78';
         ctx.fillRect(col, screenY - faceH, 4, faceH);
-        // Blue/green alternating Armco stripe at base
         var stripe = (Math.floor(depth / 120) & 1);
         ctx.fillStyle = stripe ? '#cc2222' : '#eeeeee';
         ctx.fillRect(col, screenY - wallH, 4, wallH);
-        break;
       }
       prevCell = cell;
     }
